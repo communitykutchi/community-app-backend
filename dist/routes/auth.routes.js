@@ -1,21 +1,18 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const auth_controller_1 = require("../controllers/auth.controller");
-const User_1 = __importDefault(require("../models/User"));
+const auth_middleware_1 = require("../middlewares/auth.middleware");
 const router = (0, express_1.Router)();
 router.post("/register", auth_controller_1.register);
+router.post("/otp/send", auth_controller_1.sendOtp);
+router.post("/otp/verify", auth_controller_1.verifyOtp);
+router.post("/password/reset", auth_controller_1.resetPassword);
 router.post("/login", auth_controller_1.login);
-router.get("/users", async (req, res) => {
-    try {
-        const users = await User_1.default.find();
-        res.json(users);
-    }
-    catch (error) {
-        res.status(500).json({ message: "Server Error" });
-    }
-});
+router.get("/me", auth_middleware_1.authMiddleware, auth_controller_1.getMe);
+router.get("/users", auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, auth_controller_1.listUsers);
+router.put("/users/:userId/role", auth_middleware_1.authMiddleware, auth_middleware_1.superAdminMiddleware, auth_controller_1.updateUserRole);
+router.delete("/users/:userId", auth_middleware_1.authMiddleware, auth_middleware_1.superAdminMiddleware, auth_controller_1.removeUser);
+router.get("/groups", auth_middleware_1.authMiddleware, auth_controller_1.listCommunityGroups);
+router.post("/groups", auth_middleware_1.authMiddleware, auth_middleware_1.superAdminMiddleware, auth_controller_1.createCommunityGroup);
 exports.default = router;

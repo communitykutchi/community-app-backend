@@ -3,8 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IPost extends Document {
   userId: string;
   text?: string;
-  images?: string[];
-  video?: string;
+  media?: Array<{ url: string; type?: string }>;
   poll?: {
     question: string;
     options: { text: string; votes: number }[];
@@ -18,12 +17,19 @@ export interface IPost extends Document {
   createdAt: Date;
 }
 
+const MediaSchema = new Schema(
+  {
+    url: { type: String, required: true },
+    type: { type: String },
+  },
+  { _id: false }
+);
+
 const PostSchema: Schema = new Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     text: String,
-    images: [String],
-    video: String,
+    media: [MediaSchema],
     poll: {
       question: String,
       options: [

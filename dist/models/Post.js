@@ -34,11 +34,14 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
+const MediaSchema = new mongoose_1.Schema({
+    url: { type: String, required: true },
+    type: { type: String },
+}, { _id: false });
 const PostSchema = new mongoose_1.Schema({
-    userId: { type: String, required: true },
+    userId: { type: mongoose_1.default.Schema.Types.ObjectId, ref: "User" },
     text: String,
-    images: [String],
-    video: String,
+    media: [MediaSchema],
     poll: {
         question: String,
         options: [

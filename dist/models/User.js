@@ -56,5 +56,11 @@ const UserSchema = new mongoose_1.Schema({
     },
     businessName: { type: String },
     password: { type: String, required: true },
+    jamaat: { type: String },
+    role: {
+        type: String,
+        enum: ["super_admin", "jamaat_admin", "member", "admin"],
+        default: "member",
+    },
 }, { timestamps: true });
 exports.default = mongoose_1.default.model("User", UserSchema);

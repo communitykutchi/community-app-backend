@@ -25,6 +25,7 @@
     "mongoose": "^9.0.1",
     "multer": "^2.0.2",
     "multer-s3": "^3.0.1",
+    "nodemailer": "^7.0.0",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

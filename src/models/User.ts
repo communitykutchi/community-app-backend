@@ -14,6 +14,8 @@ export interface IUser extends Document {
   occupation: "Employee" | "Business Man";
   businessName?: string;
   password: string;
+  role: "super_admin" | "jamaat_admin" | "member" | "admin";
+  jamaat?: string;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -49,6 +51,14 @@ const UserSchema = new Schema<IUser>(
     businessName: { type: String },
 
     password: { type: String, required: true },
+
+    jamaat: { type: String },
+
+    role: {
+      type: String,
+      enum: ["super_admin", "jamaat_admin", "member", "admin"],
+      default: "member",
+    },
   },
   { timestamps: true }
 );
