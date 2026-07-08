@@ -4,8 +4,8 @@ import CommunityGroup from "../models/CommunityGroup";
 import Otp from "../models/Otp";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
 import { AuthRequest } from "../middlewares/auth.middleware";
+import { sendOtpEmail } from "../services/email.service";
 
 const sanitizeUser = (user: any) => {
   const userObject = user.toObject ? user.toObject() : user;
@@ -14,58 +14,6 @@ const sanitizeUser = (user: any) => {
 };
 
 const generateOtpCode = () => String(Math.floor(100000 + Math.random() * 900000));
-
-const getEmailTransport = () => {
-  const emailUser = process.env.EMAIL_USER;
-  const rawEmailPass = process.env.EMAIL_PASS;
-  const emailService = String(process.env.EMAIL_SERVICE || "").toLowerCase();
-  const host = process.env.EMAIL_HOST;
-  const emailPass = rawEmailPass?.trim();
-
-  if (!emailUser || !emailPass) {
-    return null;
-  }
-
-  const normalizedEmailPass = emailService === "gmail" ? emailPass.replace(/\s+/g, "") : emailPass;
-
-  if (emailService === "gmail" || (!host && emailUser.toLowerCase().endsWith("@gmail.com"))) {
-    return nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: emailUser, pass: normalizedEmailPass },
-    });
-  }
-
-  if (!host) {
-    return null;
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port: Number(process.env.EMAIL_PORT || 587),
-    secure: (process.env.EMAIL_SECURE || "false") === "true",
-    auth: { user: emailUser, pass: emailPass },
-  });
-};
-
-const sendOtpEmail = async (email: string, code: string, purpose: "register" | "reset_password") => {
-  const transport = getEmailTransport();
-
-  if (!transport) {
-    throw new Error("Email transport is not configured. Set Gmail SMTP values in .env using EMAIL_SERVICE, EMAIL_USER, EMAIL_PASS, and EMAIL_FROM. For Gmail, use an App Password, not your normal password.");
-  }
-
-  const subject = purpose === "register" ? "Verify your email address" : "Reset your password";
-  const text = `Your verification code is ${code}. It expires in 10 minutes.`;
-
-  await transport.sendMail({
-    from: process.env.EMAIL_FROM || "no-reply@communityhub.com",
-    to: email,
-    subject,
-    text,
-  });
-
-  return { delivered: true };
-};
 
 export const ensureDefaultAdmin = async () => {
   const existingAdmin = await User.findOne({
@@ -145,18 +93,10 @@ export const sendOtp = async (req: Request, res: Response) => {
       message: "OTP sent to your email address",
     });
   } catch (err) {
-    const isAuthError = typeof err === "object" && err !== null && "code" in err && (err as { code?: string }).code === "EAUTH";
-    if (isAuthError) {
+    if (err instanceof Error && (err.message.includes("Resend is not configured") || err.message.includes("EMAIL_FROM is required"))) {
       return res.status(400).json({
         success: false,
-        message: "Gmail authentication failed. Please set EMAIL_PASS to a valid Google App Password and restart backend.",
-      });
-    }
-
-    if (err instanceof Error && err.message.includes("Email transport is not configured")) {
-      return res.status(400).json({
-        success: false,
-        message: "Email service is not configured. Set EMAIL_USER, EMAIL_PASS, and EMAIL_FROM in backend .env, then restart backend.",
+        message: "Email service is not configured. Set RESEND_API_KEY and EMAIL_FROM in backend .env, then restart backend.",
       });
     }
 
