@@ -21,6 +21,7 @@ export const ensureDefaultAdmin = async () => {
   });
 
   if (existingAdmin) {
+    existingAdmin.username = existingAdmin.username || "admin";
     existingAdmin.email = "admin@communityhub.com";
     existingAdmin.mobile = "03000000000";
     existingAdmin.role = "super_admin";
@@ -40,6 +41,7 @@ export const ensureDefaultAdmin = async () => {
 
   const adminUser = await User.create({
     fullName: "Community Admin",
+    username: "admin",
     mobile: adminMobile,
     email: adminEmail,
     password: hashedPassword,
@@ -175,6 +177,7 @@ export const register = async (req: Request, res: Response) => {
   try {
     const {
       fullName,
+      username,
       fatherName,
       motherName,
       familyMembers,
@@ -190,14 +193,33 @@ export const register = async (req: Request, res: Response) => {
       jamaat,
     } = req.body;
 
-    if (!fullName || !mobile || !password || !email) {
+    const normalizedName = String(fullName || "").trim();
+    const normalizedUsername = String(username || "").trim().toLowerCase();
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+
+    if (!normalizedName || !normalizedUsername || !password || !normalizedEmail) {
       return res.status(400).json({
         success: false,
-        message: "Full Name, Mobile, Email & Password are required",
+        message: "Full Name, Username, Email & Password are required",
       });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
+    if (normalizedUsername.length < 3 || normalizedUsername.length > 30) {
+      return res.status(400).json({ success: false, message: "Username must be 3 to 30 characters" });
+    }
+
+    if (!/^[a-z0-9._-]+$/.test(normalizedUsername)) {
+      return res.status(400).json({ success: false, message: "Username format is invalid" });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(400).json({ success: false, message: "Please enter a valid email address" });
+    }
+
+    if (String(password).length < 6) {
+      return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+    }
+
     const verifiedOtp = await Otp.findOne({
       email: normalizedEmail,
       purpose: "register",
@@ -209,12 +231,9 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Please verify your email first" });
     }
 
-    const exists = await User.findOne({ mobile });
-    if (exists) {
-      return res.status(400).json({
-        success: false,
-        message: "Mobile number already registered",
-      });
+    const existingUsernameUser = await User.findOne({ username: normalizedUsername });
+    if (existingUsernameUser) {
+      return res.status(400).json({ success: false, message: "Username already taken" });
     }
 
     const existingEmailUser = await User.findOne({ email: normalizedEmail });
@@ -225,14 +244,14 @@ export const register = async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
-      fullName,
+      fullName: normalizedName,
+      username: normalizedUsername,
       fatherName,
       motherName,
       familyMembers,
       cast,
       dob,
       cnic,
-      mobile,
       email: normalizedEmail,
       homeStatus,
       occupation,
@@ -254,6 +273,26 @@ export const register = async (req: Request, res: Response) => {
       success: false,
       message: "Server error",
     });
+  }
+};
+
+export const checkUsername = async (req: Request, res: Response) => {
+  try {
+    const rawUsername = req.query.username ?? req.body?.username;
+    const username = String(rawUsername || "").trim().toLowerCase();
+
+    if (!username) {
+      return res.status(400).json({ success: false, message: "Username is required", available: false });
+    }
+
+    if (username.length < 3 || username.length > 30 || !/^[a-z0-9._-]+$/.test(username)) {
+      return res.status(400).json({ success: false, message: "Invalid username", available: false });
+    }
+
+    const existing = await User.findOne({ username }).select("_id");
+    return res.json({ success: true, available: !existing });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Unable to check username", available: false });
   }
 };
 

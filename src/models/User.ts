@@ -2,13 +2,14 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface IUser extends Document {
   fullName: string;
+  username?: string;
   fatherName?: string;
   motherName?: string;
   familyMembers?: number;
   cast?: string;
   dob?: string;
   cnic?: string;
-  mobile: string;
+  mobile?: string;
   email?: string;
   homeStatus: "Owner" | "Rent";
   occupation: "Employee" | "Business Man";
@@ -22,6 +23,14 @@ const UserSchema = new Schema<IUser>(
   {
     fullName: { type: String, required: true },
 
+    username: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      lowercase: true,
+    },
+
     fatherName: { type: String },
     motherName: { type: String },
 
@@ -32,7 +41,7 @@ const UserSchema = new Schema<IUser>(
 
     cnic: { type: String },
 
-    mobile: { type: String, required: true, unique: true },
+    mobile: { type: String, unique: true, sparse: true },
 
     email: { type: String, unique: true, sparse: true },
 

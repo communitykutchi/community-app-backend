@@ -1,10 +1,12 @@
 import { Router } from "express";
-import { register, login, getMe, listUsers, updateUserRole, removeUser, listCommunityGroups, createCommunityGroup, sendOtp, verifyOtp, resetPassword } from "../controllers/auth.controller";
+import { register, login, getMe, listUsers, updateUserRole, removeUser, listCommunityGroups, createCommunityGroup, sendOtp, verifyOtp, resetPassword, checkUsername } from "../controllers/auth.controller";
 import { authMiddleware, adminMiddleware, superAdminMiddleware } from "../middlewares/auth.middleware";
 
 const router = Router();
 
 router.post("/register", register);
+router.get("/check-username", checkUsername);
+router.post("/check-username", checkUsername);
 router.post("/otp/send", sendOtp);
 router.post("/otp/verify", verifyOtp);
 router.post("/password/reset", resetPassword);
