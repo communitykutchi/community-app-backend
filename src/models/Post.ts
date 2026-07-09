@@ -13,11 +13,13 @@ export interface IPost extends Document {
   comments: {
     userId: string;
     authorName?: string;
+    authorPhotoUrl?: string;
     comment: string;
     date: Date;
     replies?: {
       userId: string;
       authorName?: string;
+      authorPhotoUrl?: string;
       comment: string;
       date: Date;
     }[];
@@ -53,12 +55,14 @@ const PostSchema: Schema = new Schema(
       {
         userId: String,
         authorName: String,
+        authorPhotoUrl: String,
         comment: String,
         date: { type: Date, default: Date.now },
         replies: [
           {
             userId: String,
             authorName: String,
+            authorPhotoUrl: String,
             comment: String,
             date: { type: Date, default: Date.now },
           },

@@ -14,6 +14,8 @@ export interface IUser extends Document {
   homeStatus: "Owner" | "Rent";
   occupation: "Employee" | "Business Man";
   businessName?: string;
+  profilePhotoUrl?: string;
+  profilePhotoPublicId?: string;
   password: string;
   role: "super_admin" | "jamaat_admin" | "member" | "admin";
   jamaat?: string;
@@ -58,6 +60,9 @@ const UserSchema = new Schema<IUser>(
     },
 
     businessName: { type: String },
+
+    profilePhotoUrl: { type: String },
+    profilePhotoPublicId: { type: String },
 
     password: { type: String, required: true },
 

@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { sendOtpEmail } from "../services/email.service";
+import { uploadBufferToCloudinary } from "../config/cloudinary";
 
 const sanitizeUser = (user: any) => {
   const userObject = user.toObject ? user.toObject() : user;
@@ -381,6 +382,118 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     return res.json({ success: true, user });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const updateMe = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const fullName = String(req.body.fullName || "").trim();
+    if (!fullName) {
+      return res.status(400).json({ success: false, message: "Full name is required" });
+    }
+
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const mobile = String(req.body.mobile || "").trim();
+    const homeStatus = String(req.body.homeStatus || user.homeStatus || "Owner");
+    const occupation = String(req.body.occupation || user.occupation || "Employee");
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: "Please enter a valid email address" });
+    }
+
+    if (!["Owner", "Rent"].includes(homeStatus)) {
+      return res.status(400).json({ success: false, message: "Invalid home status" });
+    }
+
+    if (!["Employee", "Business Man"].includes(occupation)) {
+      return res.status(400).json({ success: false, message: "Invalid occupation" });
+    }
+
+    if (email) {
+      const existingEmailUser = await User.findOne({ email, _id: { $ne: req.userId } }).select("_id");
+      if (existingEmailUser) {
+        return res.status(400).json({ success: false, message: "Email is already used by another account" });
+      }
+    }
+
+    if (mobile) {
+      const existingMobileUser = await User.findOne({ mobile, _id: { $ne: req.userId } }).select("_id");
+      if (existingMobileUser) {
+        return res.status(400).json({ success: false, message: "Mobile is already used by another account" });
+      }
+    }
+
+    user.fullName = fullName;
+    user.fatherName = String(req.body.fatherName || "").trim();
+    user.motherName = String(req.body.motherName || "").trim();
+    user.familyMembers = req.body.familyMembers === undefined || req.body.familyMembers === "" ? undefined : Number(req.body.familyMembers);
+    user.cast = String(req.body.cast || "").trim();
+    user.dob = String(req.body.dob || "").trim();
+    user.cnic = String(req.body.cnic || "").trim();
+    user.mobile = mobile || undefined;
+    user.email = email || undefined;
+    user.homeStatus = homeStatus as any;
+    user.occupation = occupation as any;
+    user.businessName = String(req.body.businessName || "").trim();
+    user.jamaat = String(req.body.jamaat || "").trim();
+
+    await user.save();
+
+    return res.json({ success: true, user: sanitizeUser(user) });
+  } catch (err: any) {
+    if (err?.code === 11000) {
+      return res.status(400).json({ success: false, message: "Mobile or email is already used by another account" });
+    }
+
+    return res.status(500).json({ success: false, message: err.message || "Unable to update profile" });
+  }
+};
+
+export const updateProfilePhoto = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) {
+      return res.status(400).json({ success: false, message: "Profile photo is required" });
+    }
+
+    if (!file.mimetype.startsWith("image/")) {
+      return res.status(400).json({ success: false, message: "Only image files are allowed" });
+    }
+
+    const uploadResult = await uploadBufferToCloudinary(file, {
+      folder: process.env.CLOUDINARY_PROFILE_FOLDER || "community-app/profile-photos",
+      resourceType: "image",
+    });
+
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      {
+        profilePhotoUrl: uploadResult.secure_url,
+        profilePhotoPublicId: uploadResult.public_id,
+      },
+      { new: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    return res.json({ success: true, user, profilePhotoUrl: uploadResult.secure_url });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to upload profile photo" });
   }
 };
 
