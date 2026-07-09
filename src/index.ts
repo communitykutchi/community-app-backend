@@ -7,6 +7,7 @@ import connectDB from "./config/db";
 import postRoutes from "./routes/posts.routes";
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/users.routes";
+import noticeRoutes from "./routes/notices.routes";
 import { ensureUploadDir } from "./utils/fileUtils";
 
 
@@ -27,6 +28,7 @@ connectDB(process.env.MONGO_URI!);
 // app.use("/api/posts", postRoutes);
 app.use("/auth", authRoutes);
 app.use("/posts", postRoutes);
+app.use("/notices", noticeRoutes);
 app.use("/api", userRoutes);
 
 app.get("/", (req, res) => {

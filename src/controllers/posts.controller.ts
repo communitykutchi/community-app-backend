@@ -1,8 +1,43 @@
 import { Response } from "express";
+import mongoose from "mongoose";
 import Post from "../models/Post";
 import User from "../models/User";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { getMediaUrl } from "../utils/fileUtils";
+
+function getCurrentUserId(req: AuthRequest) {
+  return req.userId || "anonymous";
+}
+
+function serializePost(post: any, currentUserId?: string) {
+  const authorName = typeof post.userId === "object" && post.userId ? post.userId.fullName : "Unknown user";
+  const likes = Array.isArray(post.likes) ? post.likes : [];
+  const shareUserIds = Array.isArray(post.shareUserIds) ? post.shareUserIds : [];
+  const comments = Array.isArray(post.comments) ? post.comments : [];
+
+  return {
+    _id: post._id,
+    text: post.text,
+    media: post.media || [],
+    createdAt: post.createdAt,
+    authorName,
+    likes: likes.length,
+    liked: currentUserId ? likes.includes(currentUserId) : false,
+    comments: comments.length,
+    shares: shareUserIds.length,
+    commentsList: comments.map((comment: any) => ({
+      id: String(comment._id),
+      text: comment.comment,
+      author: comment.authorName || "Anonymous user",
+      replies: (comment.replies || []).map((reply: any) => ({
+        id: String(reply._id),
+        text: reply.comment,
+        author: reply.authorName || "Anonymous user",
+        replyTo: comment.authorName || "Anonymous user",
+      })),
+    })),
+  };
+}
 
 export const createPost = async (req: AuthRequest, res: Response) => {
   try {
@@ -36,6 +71,11 @@ export const createPost = async (req: AuthRequest, res: Response) => {
       media: post.media || [],
       createdAt: post.createdAt,
       authorName,
+      likes: 0,
+      liked: false,
+      comments: 0,
+      shares: 0,
+      commentsList: [],
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Unable to create post." });
@@ -49,19 +89,123 @@ export const getPosts = async (req: AuthRequest, res: Response) => {
       .populate("userId", "fullName")
       .exec();
 
-    const formattedPosts = posts.map((post) => {
-      const authorName = typeof post.userId === "object" && post.userId ? (post.userId as any).fullName : "Unknown user";
-      return {
-        _id: post._id,
-        text: post.text,
-        media: post.media || [],
-        createdAt: post.createdAt,
-        authorName,
-      };
-    });
+    const formattedPosts = posts.map((post) => serializePost(post, req.userId));
 
     return res.json(formattedPosts);
   } catch (err) {
     return res.status(500).json({ error: err });
+  }
+};
+
+export const toggleLikePost = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = getCurrentUserId(req);
+    const post = await Post.findById(req.params.id).populate("userId", "fullName").exec();
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    const likes = post.likes || [];
+    if (likes.includes(userId)) {
+      post.likes = likes.filter((id) => id !== userId);
+    } else {
+      post.likes = [...likes, userId];
+    }
+
+    await post.save();
+    await post.populate("userId", "fullName");
+
+    return res.json(serializePost(post, userId));
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to update like." });
+  }
+};
+
+export const sharePost = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = getCurrentUserId(req);
+    const post = await Post.findById(req.params.id).populate("userId", "fullName").exec();
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    const shareUserIds = post.shareUserIds || [];
+    post.shareUserIds = [...shareUserIds, `${userId}:${Date.now()}`];
+
+    await post.save();
+    await post.populate("userId", "fullName");
+
+    return res.json(serializePost(post, userId));
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to share post." });
+  }
+};
+
+export const addComment = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = getCurrentUserId(req);
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+
+    if (!text) {
+      return res.status(400).json({ success: false, message: "Comment text is required." });
+    }
+
+    const post = await Post.findById(req.params.id).populate("userId", "fullName").exec();
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    post.comments.push({
+      userId,
+      authorName: req.user?.fullName || "Anonymous user",
+      comment: text,
+      date: new Date(),
+      replies: [],
+    });
+
+    await post.save();
+    await post.populate("userId", "fullName");
+
+    return res.json(serializePost(post, userId));
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to add comment." });
+  }
+};
+
+export const addReply = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = getCurrentUserId(req);
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+
+    if (!text) {
+      return res.status(400).json({ success: false, message: "Reply text is required." });
+    }
+
+    const post = await Post.findById(req.params.id).populate("userId", "fullName").exec();
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    const comment = (post.comments as any).id(new mongoose.Types.ObjectId(req.params.commentId));
+    if (!comment) {
+      return res.status(404).json({ success: false, message: "Comment not found." });
+    }
+
+    comment.replies = comment.replies || [];
+    comment.replies.push({
+      userId,
+      authorName: req.user?.fullName || "Anonymous user",
+      comment: text,
+      date: new Date(),
+    });
+
+    await post.save();
+    await post.populate("userId", "fullName");
+
+    return res.json(serializePost(post, userId));
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to add reply." });
   }
 };
