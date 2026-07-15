@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { addComment, addReply, createPost, getPosts, sharePost, toggleLikePost } from "../controllers/posts.controller";
+import { addComment, addReply, createPost, deletePost, getPosts, sharePost, toggleLikePost } from "../controllers/posts.controller";
 import authMiddleware from "../middlewares/auth.middleware";
 import uploadMedia from "../middlewares/upload.middleware";
 
@@ -25,6 +25,7 @@ const handleUploadMedia: express.RequestHandler = (req, res, next) => {
 
 router.post("/create", authMiddleware, handleUploadMedia, createPost);
 router.get("/all", authMiddleware, getPosts);
+router.delete("/:id", authMiddleware, deletePost);
 router.patch("/:id/like", authMiddleware, toggleLikePost);
 router.post("/:id/share", authMiddleware, sharePost);
 router.post("/:id/comments", authMiddleware, addComment);

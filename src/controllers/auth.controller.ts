@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import User from "../models/User";
 import CommunityGroup from "../models/CommunityGroup";
+import CommunityProfile from "../models/CommunityProfile";
 import Otp from "../models/Otp";
+import Post from "../models/Post";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middlewares/auth.middleware";
@@ -28,9 +30,6 @@ export const ensureDefaultAdmin = async () => {
     existingAdmin.role = "super_admin";
     existingAdmin.password = await bcrypt.hash("Admin@123", 10);
     existingAdmin.fullName = existingAdmin.fullName || "Community Admin";
-    existingAdmin.homeStatus = existingAdmin.homeStatus || "Owner";
-    existingAdmin.occupation = existingAdmin.occupation || "Employee";
-    existingAdmin.jamaat = undefined;
     await existingAdmin.save();
     return existingAdmin;
   }
@@ -47,8 +46,6 @@ export const ensureDefaultAdmin = async () => {
     email: adminEmail,
     password: hashedPassword,
     role: "super_admin",
-    homeStatus: "Owner",
-    occupation: "Employee",
   });
 
   return adminUser;
@@ -247,22 +244,27 @@ export const register = async (req: Request, res: Response) => {
     const newUser = new User({
       fullName: normalizedName,
       username: normalizedUsername,
-      fatherName,
-      motherName,
-      familyMembers,
-      cast,
       dob,
       cnic,
+      mobile: mobile ? String(mobile).trim() : undefined,
       email: normalizedEmail,
-      homeStatus,
-      occupation,
-      businessName,
       password: hashedPassword,
-      jamaat,
       role: "member",
     });
 
     await newUser.save();
+
+    await CommunityProfile.create({
+      userId: newUser._id,
+      fatherName: fatherName ? String(fatherName).trim() : undefined,
+      motherName: motherName ? String(motherName).trim() : undefined,
+      jamaat: jamaat ? String(jamaat).trim() : undefined,
+      cast: cast ? String(cast).trim() : undefined,
+      familyMembers: familyMembers === undefined || familyMembers === "" ? undefined : Number(familyMembers),
+      homeStatus: homeStatus || "Owner",
+      occupation: occupation || "Employee",
+      businessName: businessName ? String(businessName).trim() : undefined,
+    });
 
     return res.json({
       success: true,
@@ -351,9 +353,7 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "secret", {
-      expiresIn: "7d",
-    });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "secret");
 
     return res.json({
       success: true,
@@ -403,8 +403,8 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
 
     const email = String(req.body.email || "").trim().toLowerCase();
     const mobile = String(req.body.mobile || "").trim();
-    const homeStatus = String(req.body.homeStatus || user.homeStatus || "Owner");
-    const occupation = String(req.body.occupation || user.occupation || "Employee");
+    const homeStatus = String(req.body.homeStatus || "Owner");
+    const occupation = String(req.body.occupation || "Employee");
 
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ success: false, message: "Please enter a valid email address" });
@@ -433,20 +433,37 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
     }
 
     user.fullName = fullName;
-    user.fatherName = String(req.body.fatherName || "").trim();
-    user.motherName = String(req.body.motherName || "").trim();
-    user.familyMembers = req.body.familyMembers === undefined || req.body.familyMembers === "" ? undefined : Number(req.body.familyMembers);
-    user.cast = String(req.body.cast || "").trim();
     user.dob = String(req.body.dob || "").trim();
     user.cnic = String(req.body.cnic || "").trim();
     user.mobile = mobile || undefined;
     user.email = email || undefined;
-    user.homeStatus = homeStatus as any;
-    user.occupation = occupation as any;
-    user.businessName = String(req.body.businessName || "").trim();
-    user.jamaat = String(req.body.jamaat || "").trim();
 
     await user.save();
+
+    const communityProfile = await CommunityProfile.findOne({ userId: req.userId });
+    if (communityProfile) {
+      communityProfile.fatherName = String(req.body.fatherName || "").trim();
+      communityProfile.motherName = String(req.body.motherName || "").trim();
+      communityProfile.familyMembers = req.body.familyMembers === undefined || req.body.familyMembers === "" ? undefined : Number(req.body.familyMembers);
+      communityProfile.cast = String(req.body.cast || "").trim();
+      communityProfile.homeStatus = (homeStatus === "Rent" ? "Rent" : "Owner") as "Owner" | "Rent";
+      communityProfile.occupation = (occupation === "Business Man" ? "Business Man" : "Employee") as "Employee" | "Business Man";
+      communityProfile.businessName = String(req.body.businessName || "").trim();
+      communityProfile.jamaat = String(req.body.jamaat || "").trim();
+      await communityProfile.save();
+    } else {
+      await CommunityProfile.create({
+        userId: req.userId,
+        fatherName: String(req.body.fatherName || "").trim(),
+        motherName: String(req.body.motherName || "").trim(),
+        familyMembers: req.body.familyMembers === undefined || req.body.familyMembers === "" ? undefined : Number(req.body.familyMembers),
+        cast: String(req.body.cast || "").trim(),
+        homeStatus: (homeStatus === "Rent" ? "Rent" : "Owner") as "Owner" | "Rent",
+        occupation: (occupation === "Business Man" ? "Business Man" : "Employee") as "Employee" | "Business Man",
+        businessName: String(req.body.businessName || "").trim(),
+        jamaat: String(req.body.jamaat || "").trim(),
+      });
+    }
 
     return res.json({ success: true, user: sanitizeUser(user) });
   } catch (err: any) {
@@ -506,17 +523,25 @@ export const listUsers = async (req: AuthRequest, res: Response) => {
       return res.json({ success: true, users });
     }
 
-    if (requester?.role === "jamaat_admin") {
-      const scopedJamaat = String(requester?.jamaat || "").trim();
+    if (requester?.role === "moderator") {
+      const requesterProfile = await CommunityProfile.findOne({ userId: requester?._id }).lean();
+      const scopedJamaat = String(requesterProfile?.jamaat || "").trim();
       const visibleUsers = users.filter((user) => {
         if (isDefaultAdminUser(user) || user.role === "super_admin") {
           return false;
         }
 
-        return String(user.jamaat || "").trim() === scopedJamaat;
+        return false;
       });
 
-      return res.json({ success: true, users: visibleUsers });
+      if (scopedJamaat) {
+        const scopedProfiles = await CommunityProfile.find({ jamaat: scopedJamaat }).select("userId").lean();
+        const scopedUserIds = new Set(scopedProfiles.map((profile) => String(profile.userId)));
+        const filteredUsers = users.filter((user) => scopedUserIds.has(String(user._id)));
+        return res.json({ success: true, users: filteredUsers });
+      }
+
+      return res.json({ success: true, users: [] });
     }
 
     const visibleUsers = users.filter((user) => !isDefaultAdminUser(user) && user.role !== "super_admin");
@@ -574,9 +599,30 @@ export const removeUser = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: "The default admin account cannot be removed" });
     }
 
+    const userIdString = String(userId);
+
+    await Post.deleteMany({ userId });
+    await Post.updateMany(
+      {},
+      {
+        $pull: {
+          likes: userIdString,
+          shareUserIds: { $regex: `^${userIdString}:` },
+          comments: { userId: userIdString },
+        },
+      }
+    );
+    await Post.updateMany(
+      {},
+      {
+        $pull: {
+          "comments.$[].replies": { userId: userIdString },
+        },
+      }
+    );
     await User.findByIdAndDelete(userId);
 
-    return res.json({ success: true, message: "User removed" });
+    return res.json({ success: true, message: "User, posts, and post activity removed" });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Server error" });
   }

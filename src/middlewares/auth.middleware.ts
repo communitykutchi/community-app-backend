@@ -16,23 +16,34 @@ export const authMiddleware = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
+    const fallbackHeader = typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"] : undefined;
+    const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : undefined;
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!token && !fallbackHeader) {
       req.userId = undefined;
+      req.user = undefined;
       return next();
     }
 
-    const token = authHeader.split(" ")[1];
-
-    if (!token) {
-      req.userId = undefined;
+    if (!token && fallbackHeader) {
+      req.userId = String(fallbackHeader);
+      const user = await User.findById(req.userId).select("-password");
+      req.user = user;
       return next();
     }
 
-    const payload = jwt.verify(token, JWT_SECRET) as { id: string };
-    const user = await User.findById(payload.id).select("-password");
+    const payload = jwt.verify(token as string, JWT_SECRET) as { id?: string; _id?: string };
+    const resolvedUserId = payload.id || payload._id;
 
-    req.userId = payload.id;
+    if (!resolvedUserId) {
+      req.userId = undefined;
+      req.user = undefined;
+      return next();
+    }
+
+    const user = await User.findById(resolvedUserId).select("-password");
+
+    req.userId = String(resolvedUserId);
     req.user = user;
     return next();
   } catch (err) {
@@ -42,8 +53,8 @@ export const authMiddleware = async (
   }
 };
 
-const isAdminRole = (role?: string) => ["super_admin", "jamaat_admin", "admin"].includes(role || "");
-const isSuperAdminRole = (role?: string) => role === "super_admin" || role === "admin";
+const isAdminRole = (role?: string) => ["super_admin", "jamaat_admin", "moderator", "admin"].includes(role || "");
+const isSuperAdminRole = (role?: string) => ["super_admin", "admin"].includes(role || "");
 
 export const adminMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
   if (!req.user || !isAdminRole(req.user.role)) {

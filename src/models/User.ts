@@ -3,22 +3,14 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IUser extends Document {
   fullName: string;
   username?: string;
-  fatherName?: string;
-  motherName?: string;
-  familyMembers?: number;
-  cast?: string;
   dob?: string;
   cnic?: string;
   mobile?: string;
   email?: string;
-  homeStatus: "Owner" | "Rent";
-  occupation: "Employee" | "Business Man";
-  businessName?: string;
   profilePhotoUrl?: string;
   profilePhotoPublicId?: string;
   password: string;
-  role: "super_admin" | "jamaat_admin" | "member" | "admin";
-  jamaat?: string;
+  role: "super_admin" | "moderator" | "member" | "admin";
 }
 
 const UserSchema = new Schema<IUser>(
@@ -33,12 +25,6 @@ const UserSchema = new Schema<IUser>(
       lowercase: true,
     },
 
-    fatherName: { type: String },
-    motherName: { type: String },
-
-    familyMembers: { type: Number },
-
-    cast: { type: String },
     dob: { type: String },
 
     cnic: { type: String },
@@ -47,30 +33,14 @@ const UserSchema = new Schema<IUser>(
 
     email: { type: String, unique: true, sparse: true },
 
-    homeStatus: {
-      type: String,
-      enum: ["Owner", "Rent"],
-      default: "Owner",
-    },
-
-    occupation: {
-      type: String,
-      enum: ["Employee", "Business Man"],
-      default: "Employee",
-    },
-
-    businessName: { type: String },
-
     profilePhotoUrl: { type: String },
     profilePhotoPublicId: { type: String },
 
     password: { type: String, required: true },
 
-    jamaat: { type: String },
-
     role: {
       type: String,
-      enum: ["super_admin", "jamaat_admin", "member", "admin"],
+      enum: ["super_admin", "moderator", "member", "admin"],
       default: "member",
     },
   },

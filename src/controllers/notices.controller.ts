@@ -103,7 +103,7 @@ export const updateNotice = async (req: AuthRequest, res: Response) => {
     if (!ensureLoggedIn(req, res)) return;
 
     const { id } = req.params;
-    const { title, body, type, pinned } = req.body;
+    const { title, body, type, pinned, mayyatDetails } = req.body;
     const safeType = type === "mayyat" ? "mayyat" : "notice";
 
     const notice = await Notice.findById(id).exec();
@@ -119,6 +119,11 @@ export const updateNotice = async (req: AuthRequest, res: Response) => {
     notice.body = String(body).trim();
     notice.type = safeType;
     notice.pinned = Boolean(pinned);
+    if (safeType === "mayyat") {
+      notice.mayyatDetails = mayyatDetails || notice.mayyatDetails;
+    } else {
+      notice.mayyatDetails = undefined;
+    }
 
     await notice.save();
 
