@@ -34,8 +34,17 @@ function isCloudinaryUrl(url?: string) {
   }
 }
 
+function normalizeRole(role?: string) {
+  const normalized = String(role || "").trim().toLowerCase();
+  if (["jamaat_admin", "admin", "moderator", "super_admin"].includes(normalized)) {
+    return normalized === "super_admin" ? "super_admin" : "moderator";
+  }
+  return normalized;
+}
+
 function isModeratorLikeRole(role?: string) {
-  return ["super_admin", "moderator", "admin"].includes(role || "");
+  const normalized = normalizeRole(role);
+  return ["super_admin", "moderator"].includes(normalized);
 }
 
 function isOwnerLikeDelete(post: any, currentUserId?: string) {
