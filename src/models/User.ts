@@ -13,6 +13,16 @@ export interface IUser extends Document {
   role: "super_admin" | "moderator" | "member" | "admin";
 }
 
+const normalizeRoleValue = (role?: string) => {
+  const normalized = String(role || "").trim().toLowerCase();
+  if (normalized === "jamaat_admin") return "moderator";
+  if (normalized === "jamaat-admin") return "moderator";
+  if (normalized === "superadmin" || normalized === "super_admin") return "super_admin";
+  if (normalized === "mod" || normalized === "moderator") return "moderator";
+  if (normalized === "admin") return "admin";
+  return normalized || "member";
+};
+
 const UserSchema = new Schema<IUser>(
   {
     fullName: { type: String, required: true },
@@ -42,6 +52,7 @@ const UserSchema = new Schema<IUser>(
       type: String,
       enum: ["super_admin", "moderator", "member", "admin"],
       default: "member",
+      set: normalizeRoleValue,
     },
   },
   { timestamps: true }

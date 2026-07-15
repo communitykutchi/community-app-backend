@@ -16,6 +16,13 @@ const sanitizeUser = (user: any) => {
   return userObject;
 };
 
+const normalizeRoleValue = (role?: string) => {
+  const normalized = String(role || "").trim().toLowerCase();
+  if (normalized === "jamaat_admin" || normalized === "jamaat-admin") return "moderator";
+  if (normalized === "superadmin") return "super_admin";
+  return normalized || "member";
+};
+
 const generateOtpCode = () => String(Math.floor(100000 + Math.random() * 900000));
 
 export const ensureDefaultAdmin = async () => {
@@ -396,6 +403,11 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
+    user.role = normalizeRoleValue(user.role) as any;
+    if (user.role === "moderator") {
+      await user.save();
+    }
+
     const fullName = String(req.body.fullName || "").trim();
     if (!fullName) {
       return res.status(400).json({ success: false, message: "Full name is required" });
@@ -405,6 +417,8 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
     const mobile = String(req.body.mobile || "").trim();
     const homeStatus = String(req.body.homeStatus || "Owner");
     const occupation = String(req.body.occupation || "Employee");
+    const rawUsername = req.body.username;
+    const normalizedUsername = typeof rawUsername === "string" ? rawUsername.trim().toLowerCase() : undefined;
 
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ success: false, message: "Please enter a valid email address" });
@@ -432,6 +446,22 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    if (rawUsername !== undefined) {
+      if (normalizedUsername) {
+        if (normalizedUsername.length < 3 || normalizedUsername.length > 30 || !/^[a-z0-9._-]+$/.test(normalizedUsername)) {
+          return res.status(400).json({ success: false, message: "Username format is invalid" });
+        }
+
+        const existingUsernameUser = await User.findOne({ username: normalizedUsername, _id: { $ne: req.userId } }).select("_id");
+        if (existingUsernameUser) {
+          return res.status(400).json({ success: false, message: "Username is already taken" });
+        }
+      }
+
+      user.username = normalizedUsername || undefined;
+    }
+
+    user.role = normalizeRoleValue(user.role) as any;
     user.fullName = fullName;
     user.dob = String(req.body.dob || "").trim();
     user.cnic = String(req.body.cnic || "").trim();
@@ -468,7 +498,7 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
     return res.json({ success: true, user: sanitizeUser(user) });
   } catch (err: any) {
     if (err?.code === 11000) {
-      return res.status(400).json({ success: false, message: "Mobile or email is already used by another account" });
+      return res.status(400).json({ success: false, message: "Username, mobile, or email is already used by another account" });
     }
 
     return res.status(500).json({ success: false, message: err.message || "Unable to update profile" });
