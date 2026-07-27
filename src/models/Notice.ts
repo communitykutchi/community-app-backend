@@ -10,15 +10,33 @@ export interface INotice extends Document {
   type: "notice" | "mayyat";
   mayyatDetails?: {
     deceasedName?: string;
+    fatherName?: string;
+    relation?: string;
     relationName?: string;
+    funeralPrayerDayPart?: string;
+    funeralPrayerTime?: string;
+    funeralPrayerPlace?: string;
+    notes?: string;
+
+    // Legacy fields
     age?: string;
     jamaat?: string;
     passedAwayAt?: string;
-    funeralPrayerAt?: string;
-    funeralPrayerPlace?: string;
     burialPlace?: string;
-    notes?: string;
+    deceasedNameRoman?: string;
+    deceasedNameUrdu?: string;
+    fatherNameRoman?: string;
+    fatherNameUrdu?: string;
+    relationRoman?: string;
+    relationUrdu?: string;
+    dayPartRoman?: string;
+    dayPartUrdu?: string;
+    time?: string;
+    janazaLocation?: string;
+    funeralPrayerAt?: string;
   };
+  romanNotice?: string;
+  urduNotice?: string;
   pinned: boolean;
   reactionEntries: Array<{
     userId: mongoose.Types.ObjectId;
@@ -31,16 +49,30 @@ export interface INotice extends Document {
 const MayyatDetailsSchema = new Schema(
   {
     deceasedName: { type: String, default: "" },
+    fatherName: { type: String, default: "" },
+    relation: { type: String, default: "" },
     relationName: { type: String, default: "" },
+    funeralPrayerDayPart: { type: String, default: "" },
+    funeralPrayerTime: { type: String, default: "" },
+    funeralPrayerPlace: { type: String, default: "" },
+    notes: { type: String, default: "" },
+
     age: { type: String, default: "" },
     jamaat: { type: String, default: "" },
     passedAwayAt: { type: String, default: "" },
-    funeralPrayerAt: { type: String, default: "" },
-    funeralPrayerPlace: { type: String, default: "" },
     burialPlace: { type: String, default: "" },
-    notes: { type: String, default: "" },
+    deceasedNameRoman: { type: String, default: "" },
+    deceasedNameUrdu: { type: String, default: "" },
+    fatherNameRoman: { type: String, default: "" },
+    fatherNameUrdu: { type: String, default: "" },
+    relationRoman: { type: String, default: "" },
+    relationUrdu: { type: String, default: "" },
+    dayPartRoman: { type: String, default: "" },
+    dayPartUrdu: { type: String, default: "" },
+    time: { type: String, default: "" },
+    janazaLocation: { type: String, default: "" },
   },
-  { _id: false }
+  { _id: false, strict: false }
 );
 
 const NoticeSchema = new Schema<INotice>(
@@ -51,6 +83,8 @@ const NoticeSchema = new Schema<INotice>(
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
     type: { type: String, enum: ["notice", "mayyat"], default: "notice" },
     mayyatDetails: { type: MayyatDetailsSchema, required: false },
+    romanNotice: { type: String, default: "" },
+    urduNotice: { type: String, default: "" },
     pinned: { type: Boolean, default: false },
     reactionEntries: [
       {

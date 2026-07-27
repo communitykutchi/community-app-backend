@@ -6,6 +6,91 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 
 const reactionKinds: ReactionKind[] = ["heart", "thumbs_up", "correct", "wrong"];
 
+function buildMayyatNotices(details: Record<string, any> | undefined) {
+  const deceasedName = String(details?.deceasedName || details?.deceasedNameRoman || details?.deceasedNameUrdu || "").trim().toUpperCase();
+  const fatherName = String(details?.fatherName || details?.fatherNameRoman || details?.fatherNameUrdu || "").trim();
+  const relation = String(details?.relation || details?.relationRoman || details?.relationUrdu || "").trim();
+  const relationName = String(details?.relationName || "").trim();
+  const dayPart = String(details?.funeralPrayerDayPart || details?.dayPartRoman || details?.dayPartUrdu || "").trim();
+  const time = String(details?.funeralPrayerTime || details?.time || details?.funeralPrayerAt || "").trim();
+  const place = String(details?.funeralPrayerPlace || details?.janazaLocation || "").trim();
+  const notes = String(details?.notes || "").trim();
+
+  const romanLines: string[] = [];
+  romanLines.push("**إِنَّا لِلَّٰهِ وَإِنَّا إِلَيْهِ رَاجِعُونَ**");
+
+  let line2 = "Humein nihayat afsos ke saath ittila di jaati hai ke";
+  if (deceasedName) {
+    line2 += ` **${deceasedName}**`;
+  }
+  if (fatherName && relation) {
+    line2 += `, **${fatherName}** ke **${relation}** ka`;
+  } else if (fatherName && !relation) {
+    line2 += `, **${fatherName}** ka`;
+  } else if (!fatherName && relation) {
+    line2 += ` ke **${relation}** ka`;
+  } else if (relationName) {
+    line2 += `, **${relationName}** ka`;
+  } else {
+    line2 += " ka";
+  }
+  line2 += " **raza-e-ilahi se inteqal ho gaya hai.**";
+  romanLines.push(line2);
+
+  let dayPartStr = dayPart;
+  if (dayPartStr && !/^aaj\b/i.test(dayPartStr)) {
+    dayPartStr = `Aaj ${dayPartStr}`;
+  } else if (!dayPartStr) {
+    dayPartStr = "Aaj";
+  }
+
+  let timeStr = time;
+  if (timeStr && !/baje/i.test(timeStr)) {
+    timeStr = `${timeStr} baje`;
+  }
+
+  const placeStr = place || "{Namaz-e-Janaza Ka Muqam (Masjid + Address)}";
+
+  let line3 = `**Namaz-e-Janaza ${dayPartStr}`;
+  if (timeStr) {
+    line3 += ` ${timeStr}`;
+  }
+  line3 += ` ${placeStr} mein ada ki jaaye gi.**`;
+  romanLines.push(line3);
+
+  romanLines.push("Allah Ta'ala marhoom ki maghfirat farmaaye, un ki qabar ko roshan farmaaye, unhein Jannat-ul-Firdous mein aala maqam ata farmaaye aur tamam lawaheqeen ko sabr-e-jameel ata farmaaye.");
+  romanLines.push("**Ameen.**");
+
+  if (notes) {
+    romanLines.push(`**Note:** ${notes}`);
+  }
+
+  const romanNotice = romanLines.join("\n");
+
+  const urduLines: string[] = [];
+  urduLines.push("إِنَّا لِلَّٰهِ وَإِنَّا إِلَيْهِ رَاجِعُونَ");
+
+  let urduAnnounce = "ہمیں نہایت افسوس کے ساتھ اطلاع دی جاتی ہے کہ";
+  if (deceasedName) urduAnnounce += ` ${deceasedName}`;
+  if (fatherName || relation || relationName) {
+    urduAnnounce += ` (${[fatherName, relation, relationName].filter(Boolean).join(" - ")})`;
+  }
+  urduAnnounce += " کا رضائے الٰہی سے انتقال ہو گیا ہے۔";
+  urduLines.push(urduAnnounce);
+
+  if (timeStr || place) {
+    urduLines.push(`نمازِ جنازہ: ${[dayPartStr, timeStr, place].filter(Boolean).join(" - ")} میں ادا کی جائے گی۔`);
+  }
+  if (notes) urduLines.push(`نوٹ: ${notes}`);
+
+  urduLines.push("اللہ تعالیٰ مرحوم کی مغفرت فرمائے، ان کی قبر کو روشن فرمائے، انہیں جنت الفردوس میں اعلیٰ مقام عطا فرمائے اور تمام لواحقین کو صبرِ جمیل عطا فرمائے۔");
+  urduLines.push("آمین۔");
+
+  const urduNotice = urduLines.join("\n\n");
+
+  return { romanNotice, urduNotice };
+}
+
 function getReactionCounts(notice: INotice) {
   const counts: Record<ReactionKind, number> = {
     heart: 0,
@@ -42,6 +127,8 @@ function serializeNotice(notice: INotice, currentUserId?: string) {
     createdAt: notice.createdAt,
     type: notice.type,
     mayyatDetails: notice.mayyatDetails,
+    romanNotice: notice.romanNotice,
+    urduNotice: notice.urduNotice,
     pinned: Boolean(notice.pinned),
     reactionCounts: counts,
     reactions: counts.heart + counts.thumbs_up + counts.correct + counts.wrong,
@@ -75,18 +162,22 @@ export const createNotice = async (req: AuthRequest, res: Response) => {
 
     const { title, body, type, mayyatDetails, pinned } = req.body;
     const safeType = type === "mayyat" ? "mayyat" : "notice";
+    const safeBody = String(body || "").trim();
 
-    if (!title || !String(title).trim() || !body || !String(body).trim()) {
+    if (!title || !String(title).trim() || (!safeBody && safeType !== "mayyat")) {
       return res.status(400).json({ success: false, message: "Title and body are required" });
     }
 
+    const mayyatContent = safeType === "mayyat" ? buildMayyatNotices(mayyatDetails) : undefined;
     const notice = await Notice.create({
       title: String(title).trim(),
-      body: String(body).trim(),
+      body: safeType === "mayyat" ? mayyatContent?.romanNotice || safeBody : safeBody,
       author: req.user?.fullName || "Admin",
       createdBy: new mongoose.Types.ObjectId(req.userId),
       type: safeType,
       mayyatDetails: safeType === "mayyat" ? mayyatDetails : undefined,
+      romanNotice: mayyatContent?.romanNotice || "",
+      urduNotice: mayyatContent?.urduNotice || "",
       pinned: Boolean(pinned),
       reactionEntries: [],
       shareUserIds: [],
@@ -105,24 +196,30 @@ export const updateNotice = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { title, body, type, pinned, mayyatDetails } = req.body;
     const safeType = type === "mayyat" ? "mayyat" : "notice";
+    const safeBody = String(body || "").trim();
 
     const notice = await Notice.findById(id).exec();
     if (!notice) {
       return res.status(404).json({ success: false, message: "Notice not found" });
     }
 
-    if (!title || !String(title).trim() || !body || !String(body).trim()) {
+    if (!title || !String(title).trim() || (!safeBody && safeType !== "mayyat")) {
       return res.status(400).json({ success: false, message: "Title and body are required" });
     }
 
     notice.title = String(title).trim();
-    notice.body = String(body).trim();
+    notice.body = safeType === "mayyat" ? (buildMayyatNotices(mayyatDetails).romanNotice || safeBody) : safeBody;
     notice.type = safeType;
     notice.pinned = Boolean(pinned);
     if (safeType === "mayyat") {
       notice.mayyatDetails = mayyatDetails || notice.mayyatDetails;
+      const mayyatContent = buildMayyatNotices(notice.mayyatDetails);
+      notice.romanNotice = mayyatContent.romanNotice;
+      notice.urduNotice = mayyatContent.urduNotice;
     } else {
       notice.mayyatDetails = undefined;
+      notice.romanNotice = "";
+      notice.urduNotice = "";
     }
 
     await notice.save();
