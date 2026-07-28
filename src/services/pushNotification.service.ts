@@ -75,8 +75,10 @@ export async function sendPushNotificationToAll(
     const expoMessages: ExpoPushMessage[] = [];
     const rawFcmTokens: string[] = [];
 
-    for (const pushToken of tokens) {
-      if (Expo.isExpoPushToken(pushToken) || pushToken.startsWith("ExponentPushToken") || pushToken.startsWith("ExpoPushToken")) {
+    for (const rawToken of tokens) {
+      const pushToken = String(rawToken || "");
+      const strToken = pushToken as string;
+      if (Expo.isExpoPushToken(pushToken) || strToken.startsWith("ExponentPushToken") || strToken.startsWith("ExpoPushToken")) {
         expoMessages.push({
           to: pushToken,
           sound: "default",
@@ -88,8 +90,7 @@ export async function sendPushNotificationToAll(
           badge: 1,
         });
       } else {
-        // Attempt Expo delivery if formatted
-        const formattedExpoToken = pushToken.includes("[") ? pushToken : `ExponentPushToken[${pushToken}]`;
+        const formattedExpoToken = strToken.includes("[") ? pushToken : `ExponentPushToken[${pushToken}]`;
         if (Expo.isExpoPushToken(formattedExpoToken)) {
           expoMessages.push({
             to: formattedExpoToken,
@@ -154,8 +155,10 @@ export async function sendPushNotificationToUser(
     const expoMessages: ExpoPushMessage[] = [];
     const rawFcmTokens: string[] = [];
 
-    for (const pushToken of tokens) {
-      if (Expo.isExpoPushToken(pushToken)) {
+    for (const rawToken of tokens) {
+      const pushToken = String(rawToken || "");
+      const strToken = pushToken as string;
+      if (Expo.isExpoPushToken(pushToken) || strToken.startsWith("ExponentPushToken") || strToken.startsWith("ExpoPushToken")) {
         expoMessages.push({
           to: pushToken,
           sound: "default",
@@ -167,7 +170,21 @@ export async function sendPushNotificationToUser(
           badge: 1,
         });
       } else {
-        rawFcmTokens.push(pushToken);
+        const formattedExpoToken = strToken.includes("[") ? pushToken : `ExponentPushToken[${pushToken}]`;
+        if (Expo.isExpoPushToken(formattedExpoToken)) {
+          expoMessages.push({
+            to: formattedExpoToken,
+            sound: "default",
+            priority: "high",
+            channelId: "default",
+            title,
+            body,
+            data: data || {},
+            badge: 1,
+          });
+        } else {
+          rawFcmTokens.push(pushToken);
+        }
       }
     }
 
