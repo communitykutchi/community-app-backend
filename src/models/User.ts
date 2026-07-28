@@ -11,6 +11,8 @@ export interface IUser extends Document {
   profilePhotoPublicId?: string;
   password: string;
   role: "super_admin" | "moderator" | "member" | "admin";
+  pushToken?: string;
+  pushTokens?: string[];
 }
 
 const normalizeRoleValue = (role?: string) => {
@@ -48,6 +50,9 @@ const UserSchema = new Schema<IUser>(
 
     password: { type: String, required: true },
 
+    pushToken: { type: String },
+    pushTokens: [{ type: String }],
+
     role: {
       type: String,
       enum: ["super_admin", "moderator", "member", "admin"],
@@ -57,5 +62,6 @@ const UserSchema = new Schema<IUser>(
   },
   { timestamps: true }
 );
+
 
 export default mongoose.model<IUser>("User", UserSchema);

@@ -4,6 +4,7 @@ import Post from "../models/Post";
 import User from "../models/User";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { uploadBufferToCloudinary } from "../config/cloudinary";
+import { sendPushNotificationToAll } from "../services/pushNotification.service";
 
 const CLOUDINARY_HOSTS = new Set(["res.cloudinary.com", "cloudinary.com"]);
 
@@ -130,6 +131,17 @@ export const createPost = async (req: AuthRequest, res: Response) => {
     const user = userId ? await User.findById(userId).select("fullName profilePhotoUrl").lean() : null;
     const authorName = user?.fullName || "Anonymous user";
     const authorPhotoUrl = user?.profilePhotoUrl || "";
+
+    const notifTitle = `${authorName} shared a post`;
+    const notifBody = text?.trim()
+      ? (text.trim().length > 100 ? text.trim().substring(0, 100) + "..." : text.trim())
+      : "📷 Photo/Video post shared";
+
+    void sendPushNotificationToAll(notifTitle, notifBody, {
+      targetTab: "feed",
+      targetId: String(post._id),
+      type: "post",
+    });
 
     return res.json({
       _id: post._id,

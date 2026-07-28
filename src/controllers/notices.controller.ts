@@ -3,18 +3,19 @@ import mongoose from "mongoose";
 import Notice, { INotice, ReactionKind } from "../models/Notice";
 import NoticeReadState from "../models/NoticeReadState";
 import { AuthRequest } from "../middlewares/auth.middleware";
+import { sendPushNotificationToAll } from "../services/pushNotification.service";
 
 const reactionKinds: ReactionKind[] = ["heart", "thumbs_up", "correct", "wrong"];
 
 function buildMayyatNotices(details: Record<string, any> | undefined) {
-  const deceasedName = String(details?.deceasedName || details?.deceasedNameRoman || details?.deceasedNameUrdu || "").trim().toUpperCase();
-  const fatherName = String(details?.fatherName || details?.fatherNameRoman || details?.fatherNameUrdu || "").trim();
-  const relation = String(details?.relation || details?.relationRoman || details?.relationUrdu || "").trim();
+  const deceasedName = String(details?.deceasedNameRoman || details?.deceasedNameUrdu || details?.deceasedName || "").trim().toUpperCase();
+  const fatherName = String(details?.fatherNameRoman || details?.fatherNameUrdu || details?.fatherName || "").trim();
+  const relation = String(details?.relationRoman || details?.relationUrdu || details?.relation || "").trim();
   const relationName = String(details?.relationName || "").trim();
-  const dayPart = String(details?.funeralPrayerDayPart || details?.dayPartRoman || details?.dayPartUrdu || "").trim();
-  const time = String(details?.funeralPrayerTime || details?.time || details?.funeralPrayerAt || "").trim();
-  const place = String(details?.funeralPrayerPlace || details?.janazaLocation || "").trim();
-  const notes = String(details?.notes || "").trim();
+  const dayPart = String(details?.funeralPrayerDayPartRoman || details?.funeralPrayerDayPartUrdu || details?.funeralPrayerDayPart || details?.dayPartRoman || details?.dayPartUrdu || "").trim();
+  const time = String(details?.funeralPrayerTimeRoman || details?.funeralPrayerTimeUrdu || details?.funeralPrayerTime || details?.time || details?.funeralPrayerAt || "").trim();
+  const place = String(details?.funeralPrayerPlaceRoman || details?.funeralPrayerPlaceUrdu || details?.funeralPrayerPlace || details?.janazaLocation || "").trim();
+  const notes = String(details?.notesRoman || details?.notesUrdu || details?.notes || "").trim();
 
   const romanLines: string[] = [];
   romanLines.push("**إِنَّا لِلَّٰهِ وَإِنَّا إِلَيْهِ رَاجِعُونَ**");
@@ -183,6 +184,19 @@ export const createNotice = async (req: AuthRequest, res: Response) => {
       shareUserIds: [],
     });
 
+    const notifTitle = safeType === "mayyat"
+      ? `🖤 Mayyat Announcement: ${mayyatDetails?.deceasedNameRoman || mayyatDetails?.deceasedNameUrdu || mayyatDetails?.deceasedName || String(title).trim()}`
+      : `📢 ${String(title).trim()}`;
+    const notifBody = safeType === "mayyat"
+      ? "إِنَّا لِلَّٰهِ وَإِنَّا إِلَيْهِ رَاجِعُونَ - Namaz-e-Janaza details"
+      : (safeBody.length > 120 ? safeBody.substring(0, 120) + "..." : safeBody);
+
+    void sendPushNotificationToAll(notifTitle, notifBody, {
+      targetTab: "notices",
+      targetId: String(notice._id),
+      type: safeType,
+    });
+
     return res.json({ success: true, notice: serializeNotice(notice, req.userId) });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Unable to create notice" });
@@ -256,7 +270,7 @@ export const togglePinNotice = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: "Notice not found" });
     }
 
-    notice.pinned = Boolean(pinned);
+    notice.pinned = typeof pinned === "boolean" ? pinned : !notice.pinned;
     await notice.save();
 
     return res.json({ success: true, notice: serializeNotice(notice, req.userId) });

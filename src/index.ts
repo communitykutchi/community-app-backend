@@ -9,7 +9,7 @@ import { removeOrphanPosts } from "./controllers/posts.controller";
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/users.routes";
 import noticeRoutes from "./routes/notices.routes";
-
+import notificationRoutes from "./routes/notifications.routes";
 
 dotenv.config();
 
@@ -36,6 +36,10 @@ async function startServer() {
   app.use("/api/posts", postRoutes);
   app.use("/notices", noticeRoutes);
   app.use("/api/notices", noticeRoutes);
+  app.use("/notifications", notificationRoutes);
+  app.use("/api/notifications", notificationRoutes);
+  app.use("/users", userRoutes);
+  app.use("/api/users", userRoutes);
   app.use("/api", userRoutes);
 
   app.listen(PORT, () => {

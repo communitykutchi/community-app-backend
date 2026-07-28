@@ -23,6 +23,7 @@
     "cloudinary": "^2.10.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "expo-server-sdk": "^6.1.0",
     "express": "^5.2.1",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.3",
