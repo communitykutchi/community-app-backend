@@ -8,6 +8,7 @@ import postRoutes from "./routes/posts.routes";
 import { removeOrphanPosts } from "./controllers/posts.controller";
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/users.routes";
+import friendRoutes from "./routes/friends.routes";
 import noticeRoutes from "./routes/notices.routes";
 import notificationRoutes from "./routes/notifications.routes";
 
@@ -41,6 +42,8 @@ async function startServer() {
   app.use("/users", userRoutes);
   app.use("/api/users", userRoutes);
   app.use("/api", userRoutes);
+  app.use("/friends", friendRoutes);
+  app.use("/api/friends", friendRoutes);
 
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, Types } from "mongoose";
 
 export interface IUser extends Document {
   fullName: string;
@@ -13,6 +13,11 @@ export interface IUser extends Document {
   role: "super_admin" | "moderator" | "member" | "admin";
   pushToken?: string;
   pushTokens?: string[];
+  friends?: Types.ObjectId[];
+  friendRequestsSent?: Types.ObjectId[];
+  friendRequestsReceived?: Types.ObjectId[];
+  isOnline?: boolean;
+  lastActive?: Date;
 }
 
 const normalizeRoleValue = (role?: string) => {
@@ -52,6 +57,11 @@ const UserSchema = new Schema<IUser>(
 
     pushToken: { type: String },
     pushTokens: [{ type: String }],
+    friends: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    friendRequestsSent: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    friendRequestsReceived: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    isOnline: { type: Boolean, default: false },
+    lastActive: { type: Date, default: Date.now },
 
     role: {
       type: String,
