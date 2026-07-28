@@ -184,12 +184,14 @@ export const createNotice = async (req: AuthRequest, res: Response) => {
       shareUserIds: [],
     });
 
+    const authorName = req.user?.fullName || "Community Admin";
+    const deceasedName = (mayyatDetails?.deceasedNameRoman || mayyatDetails?.deceasedNameUrdu || mayyatDetails?.deceasedName || String(title).trim()).toUpperCase();
     const notifTitle = safeType === "mayyat"
-      ? `🖤 Mayyat Announcement: ${mayyatDetails?.deceasedNameRoman || mayyatDetails?.deceasedNameUrdu || mayyatDetails?.deceasedName || String(title).trim()}`
-      : `📢 ${String(title).trim()}`;
+      ? `🕌 MAYYAT ALERT: ${deceasedName}`
+      : `📢 Announcement: ${String(title).trim()}`;
     const notifBody = safeType === "mayyat"
-      ? "إِنَّا لِلَّٰهِ وَإِنَّا إِلَيْهِ رَاجِعُونَ - Namaz-e-Janaza details"
-      : (safeBody.length > 120 ? safeBody.substring(0, 120) + "..." : safeBody);
+      ? "إِنَّا لِلَّٰهِ وَإِنَّا إِلَيْهِ رَاجِعُونَ — Tap to view Janaza & Soyem details."
+      : `By ${authorName} • ${safeBody.length > 110 ? safeBody.substring(0, 110) + "..." : safeBody}`;
 
     void sendPushNotificationToAll(notifTitle, notifBody, {
       targetTab: "notices",

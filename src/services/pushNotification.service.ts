@@ -1,9 +1,88 @@
 import { Expo, ExpoPushMessage } from "expo-server-sdk";
+const admin = require("firebase-admin");
 import User from "../models/User";
 
 const expo = new Expo();
 
+// Initialize Firebase Admin SDK for FCM
+let firebaseApp: any = null;
+try {
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (serviceAccountJson) {
+    const serviceAccount = typeof serviceAccountJson === "string" && serviceAccountJson.startsWith("{") 
+      ? JSON.parse(serviceAccountJson) 
+      : serviceAccountJson;
+    firebaseApp = admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+    console.log("Firebase Admin SDK initialized successfully.");
+  } else {
+    try {
+      const serviceAccount = require("../config/service-account.json");
+      firebaseApp = admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+      console.log("Firebase Admin SDK initialized with local service-account.json");
+    } catch {
+      console.log("Firebase Admin SDK: FIREBASE_SERVICE_ACCOUNT env or config/service-account.json not provided.");
+    }
+  }
+} catch (err: any) {
+  console.log("Firebase Admin initialization notice:", err?.message || err);
+}
+
+async function sendFcmMulticast(tokens: string[], title: string, body: string, data?: Record<string, any>) {
+  if (!firebaseApp || tokens.length === 0) return;
+  try {
+    const stringData: Record<string, string> = {
+      title,
+      body,
+    };
+    if (data) {
+      Object.keys(data).forEach((key) => {
+        stringData[key] = String(data[key]);
+      });
+    }
+
+    const message: any = {
+      tokens,
+      notification: {
+        title,
+        body,
+      },
+      android: {
+        priority: "high",
+        notification: {
+          sound: "default",
+          channelId: "default",
+          priority: "max",
+          defaultSound: true,
+          defaultVibrateTimings: true,
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: "default",
+            badge: 1,
+          },
+        },
+      },
+      data: stringData,
+    };
+
+    const response = await admin.messaging().sendEachForMulticast(message);
+    console.log(`Firebase FCM multicast sent to ${tokens.length} devices. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+  } catch (err: any) {
+    console.error("Firebase FCM send error:", err?.message || err);
+  }
+}
+
 async function sendRawFcmNotification(pushToken: string, title: string, body: string, data?: Record<string, any>) {
+  if (firebaseApp) {
+    await sendFcmMulticast([pushToken], title, body, data);
+    return;
+  }
   try {
     const fcmServerKey = process.env.FCM_SERVER_KEY || "AIzaSyA1gQdY4LTxWRzRQmmJfOHdcAfwtQi6JRo";
     const payload = {
@@ -76,9 +155,9 @@ export async function sendPushNotificationToAll(
     const rawFcmTokens: string[] = [];
 
     for (const rawToken of tokens) {
-      const pushToken = String(rawToken || "");
-      const strToken = pushToken as string;
-      if (Expo.isExpoPushToken(pushToken) || strToken.startsWith("ExponentPushToken") || strToken.startsWith("ExpoPushToken")) {
+      const pushToken = String(rawToken || "").trim();
+      if (!pushToken) continue;
+      if (pushToken.startsWith("ExponentPushToken") || pushToken.startsWith("ExpoPushToken")) {
         expoMessages.push({
           to: pushToken,
           sound: "default",
@@ -90,21 +169,7 @@ export async function sendPushNotificationToAll(
           badge: 1,
         });
       } else {
-        const formattedExpoToken = strToken.includes("[") ? pushToken : `ExponentPushToken[${pushToken}]`;
-        if (Expo.isExpoPushToken(formattedExpoToken)) {
-          expoMessages.push({
-            to: formattedExpoToken,
-            sound: "default",
-            priority: "high",
-            channelId: "default",
-            title,
-            body,
-            data: data || {},
-            badge: 1,
-          });
-        } else {
-          rawFcmTokens.push(pushToken);
-        }
+        rawFcmTokens.push(pushToken);
       }
     }
 
@@ -156,9 +221,9 @@ export async function sendPushNotificationToUser(
     const rawFcmTokens: string[] = [];
 
     for (const rawToken of tokens) {
-      const pushToken = String(rawToken || "");
-      const strToken = pushToken as string;
-      if (Expo.isExpoPushToken(pushToken) || strToken.startsWith("ExponentPushToken") || strToken.startsWith("ExpoPushToken")) {
+      const pushToken = String(rawToken || "").trim();
+      if (!pushToken) continue;
+      if (pushToken.startsWith("ExponentPushToken") || pushToken.startsWith("ExpoPushToken")) {
         expoMessages.push({
           to: pushToken,
           sound: "default",
@@ -170,21 +235,7 @@ export async function sendPushNotificationToUser(
           badge: 1,
         });
       } else {
-        const formattedExpoToken = strToken.includes("[") ? pushToken : `ExponentPushToken[${pushToken}]`;
-        if (Expo.isExpoPushToken(formattedExpoToken)) {
-          expoMessages.push({
-            to: formattedExpoToken,
-            sound: "default",
-            priority: "high",
-            channelId: "default",
-            title,
-            body,
-            data: data || {},
-            badge: 1,
-          });
-        } else {
-          rawFcmTokens.push(pushToken);
-        }
+        rawFcmTokens.push(pushToken);
       }
     }
 

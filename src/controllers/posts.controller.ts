@@ -132,10 +132,10 @@ export const createPost = async (req: AuthRequest, res: Response) => {
     const authorName = user?.fullName || "Anonymous user";
     const authorPhotoUrl = user?.profilePhotoUrl || "";
 
-    const notifTitle = `${authorName} shared a post`;
+    const notifTitle = `💬 Community Feed: ${authorName}`;
     const notifBody = text?.trim()
-      ? (text.trim().length > 100 ? text.trim().substring(0, 100) + "..." : text.trim())
-      : "📷 Photo/Video post shared";
+      ? `"${text.trim().length > 100 ? text.trim().substring(0, 100) + "..." : text.trim()}"`
+      : "📷 Shared a photo/video in community feed. Tap to view.";
 
     void sendPushNotificationToAll(notifTitle, notifBody, {
       targetTab: "feed",
