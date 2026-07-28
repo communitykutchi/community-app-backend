@@ -76,7 +76,7 @@ export async function sendPushNotificationToAll(
     const rawFcmTokens: string[] = [];
 
     for (const pushToken of tokens) {
-      if (Expo.isExpoPushToken(pushToken)) {
+      if (Expo.isExpoPushToken(pushToken) || pushToken.startsWith("ExponentPushToken") || pushToken.startsWith("ExpoPushToken")) {
         expoMessages.push({
           to: pushToken,
           sound: "default",
@@ -88,7 +88,22 @@ export async function sendPushNotificationToAll(
           badge: 1,
         });
       } else {
-        rawFcmTokens.push(pushToken);
+        // Attempt Expo delivery if formatted
+        const formattedExpoToken = pushToken.includes("[") ? pushToken : `ExponentPushToken[${pushToken}]`;
+        if (Expo.isExpoPushToken(formattedExpoToken)) {
+          expoMessages.push({
+            to: formattedExpoToken,
+            sound: "default",
+            priority: "high",
+            channelId: "default",
+            title,
+            body,
+            data: data || {},
+            badge: 1,
+          });
+        } else {
+          rawFcmTokens.push(pushToken);
+        }
       }
     }
 
