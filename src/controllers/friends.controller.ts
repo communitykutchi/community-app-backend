@@ -571,9 +571,38 @@ export const markChatAsRead = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    return res.json({ success: true });
+    return res.json({ success: true, message: "Chat marked as read" });
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message || "Unable to mark chat as read" });
+    return res.status(500).json({ success: false, message: err.message || "Unable to mark chat read" });
+  }
+};
+
+export const markChatAsDelivered = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
+    const { chatId, senderId } = req.body || {};
+    const targetUserId = req.userId;
+
+    if (chatId && mongoose.isObjectIdOrHexString(chatId)) {
+      await Chat.updateOne(
+        { _id: chatId },
+        { $set: { "messages.$[elem].isDelivered": true } },
+        { arrayFilters: [{ "elem.sender": { $ne: targetUserId }, "elem.isDelivered": false }] }
+      ).catch(() => {});
+    } else {
+      await Chat.updateMany(
+        { participants: targetUserId, "messages.sender": { $ne: targetUserId }, "messages.isDelivered": false },
+        { $set: { "messages.$[elem].isDelivered": true } },
+        { arrayFilters: [{ "elem.sender": { $ne: targetUserId }, "elem.isDelivered": false }] }
+      ).catch(() => {});
+    }
+
+    return res.json({ success: true, message: "Messages marked as delivered" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to mark chat delivered" });
   }
 };
 

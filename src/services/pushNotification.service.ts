@@ -2,6 +2,7 @@ import { Expo, ExpoPushMessage } from "expo-server-sdk";
 import { initializeApp, cert, App } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import User from "../models/User";
+import Chat from "../models/Chat";
 
 const expo = new Expo();
 
@@ -266,6 +267,24 @@ export async function sendPushNotificationToUser(
     if (rawFcmTokens.length > 0) {
       for (const fcmToken of rawFcmTokens) {
         await sendRawFcmNotification(fcmToken, title, body, data);
+      }
+    }
+
+    // Mark chat messages as delivered in background when push notification is sent to recipient
+    if (data?.targetTab === "chat" || data?.chatId) {
+      const recipientObjectId = userId;
+      if (data.chatId) {
+        await Chat.updateOne(
+          { _id: data.chatId },
+          { $set: { "messages.$[elem].isDelivered": true } },
+          { arrayFilters: [{ "elem.sender": { $ne: recipientObjectId }, "elem.isDelivered": false }] }
+        ).catch(() => {});
+      } else {
+        await Chat.updateMany(
+          { participants: recipientObjectId, "messages.sender": { $ne: recipientObjectId }, "messages.isDelivered": false },
+          { $set: { "messages.$[elem].isDelivered": true } },
+          { arrayFilters: [{ "elem.sender": { $ne: recipientObjectId }, "elem.isDelivered": false }] }
+        ).catch(() => {});
       }
     }
   } catch (error) {

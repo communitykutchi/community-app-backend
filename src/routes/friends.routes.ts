@@ -15,6 +15,7 @@ import {
   sendMessage,
   getUnreadChatCount,
   markChatAsRead,
+  markChatAsDelivered,
   deleteMessage,
 } from "../controllers/friends.controller";
 
@@ -26,6 +27,7 @@ router.get("/search", searchUsers);
 router.get("/me", getFriends);
 router.get("/requests/incoming", getIncomingRequests);
 router.get("/unread-chat-count", getUnreadChatCount);
+router.post("/chats/delivered-ack", markChatAsDelivered);
 router.post("/request/:friendId", sendFriendRequest);
 router.post("/request/:friendId/cancel", cancelFriendRequest);
 router.post("/unfriend/:friendId", unfriend);
