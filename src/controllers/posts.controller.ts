@@ -9,7 +9,7 @@ import { sendPushNotificationToAll } from "../services/pushNotification.service"
 const CLOUDINARY_HOSTS = new Set(["res.cloudinary.com", "cloudinary.com"]);
 
 function getCurrentUserId(req: AuthRequest) {
-  const candidate = req.userId || (req.user as any)?._id || req.headers["x-user-id"];
+  const candidate = req.userId || (req.user as any)?._id;
   return candidate ? String(candidate) : "anonymous";
 }
 
@@ -137,7 +137,7 @@ export const createPost = async (req: AuthRequest, res: Response) => {
       ? `"${text.trim().length > 100 ? text.trim().substring(0, 100) + "..." : text.trim()}"`
       : "📷 Shared a photo/video in community feed. Tap to view.";
 
-    void sendPushNotificationToAll(notifTitle, notifBody, {
+    await sendPushNotificationToAll(notifTitle, notifBody, {
       targetTab: "feed",
       targetId: String(post._id),
       type: "post",

@@ -193,7 +193,7 @@ export const createNotice = async (req: AuthRequest, res: Response) => {
       ? "إِنَّا لِلَّٰهِ وَإِنَّا إِلَيْهِ رَاجِعُونَ — Tap to view Janaza & Soyem details."
       : `By ${authorName} • ${safeBody.length > 110 ? safeBody.substring(0, 110) + "..." : safeBody}`;
 
-    void sendPushNotificationToAll(notifTitle, notifBody, {
+    await sendPushNotificationToAll(notifTitle, notifBody, {
       targetTab: "notices",
       targetId: String(notice._id),
       type: safeType,

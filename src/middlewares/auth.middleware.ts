@@ -16,40 +16,53 @@ export const authMiddleware = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
-    const fallbackHeader = typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"] : undefined;
     const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : undefined;
 
-    if (!token && !fallbackHeader) {
-      req.userId = undefined;
-      req.user = undefined;
-      return next();
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        code: "UNAUTHORIZED",
+        message: "Authentication token is missing",
+      });
     }
 
-    if (!token && fallbackHeader) {
-      req.userId = String(fallbackHeader);
-      const user = await User.findById(req.userId).select("-password");
-      req.user = user;
-      return next();
-    }
-
-    const payload = jwt.verify(token as string, JWT_SECRET) as { id?: string; _id?: string };
+    const payload = jwt.verify(token as string, JWT_SECRET) as { id?: string; _id?: string; activeSessionId?: string };
     const resolvedUserId = payload.id || payload._id;
 
     if (!resolvedUserId) {
-      req.userId = undefined;
-      req.user = undefined;
-      return next();
+      return res.status(401).json({
+        success: false,
+        code: "INVALID_TOKEN",
+        message: "Invalid token payload",
+      });
     }
 
     const user = await User.findById(resolvedUserId).select("-password");
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "User not found",
+      });
+    }
+
+    if (!payload.activeSessionId || !user.activeSessionId || user.activeSessionId !== payload.activeSessionId) {
+      return res.status(401).json({
+        success: false,
+        code: "ACCOUNT_LOGGED_IN_ELSEWHERE",
+        message: "Your account was logged in on another device. You have been logged out automatically.",
+      });
+    }
 
     req.userId = String(resolvedUserId);
     req.user = user;
     return next();
   } catch (err) {
-    req.userId = undefined;
-    req.user = undefined;
-    return next();
+    return res.status(401).json({
+      success: false,
+      code: "INVALID_TOKEN",
+      message: "Session expired or invalid token.",
+    });
   }
 };
 

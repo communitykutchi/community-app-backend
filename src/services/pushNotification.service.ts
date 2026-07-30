@@ -1,38 +1,65 @@
 import { Expo, ExpoPushMessage } from "expo-server-sdk";
-const admin = require("firebase-admin");
+import { initializeApp, cert, App } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
 import User from "../models/User";
 
 const expo = new Expo();
 
+import fs from "fs";
+import path from "path";
+
 // Initialize Firebase Admin SDK for FCM
-let firebaseApp: any = null;
+let firebaseApp: App | null = null;
 try {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+
   if (serviceAccountJson) {
-    const serviceAccount = typeof serviceAccountJson === "string" && serviceAccountJson.startsWith("{") 
+    const serviceAccount = typeof serviceAccountJson === "string" && serviceAccountJson.trim().startsWith("{") 
       ? JSON.parse(serviceAccountJson) 
       : serviceAccountJson;
-    firebaseApp = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    firebaseApp = initializeApp({
+      credential: cert(serviceAccount),
     });
-    console.log("Firebase Admin SDK initialized successfully.");
+    console.log("Firebase Admin SDK initialized successfully with FIREBASE_SERVICE_ACCOUNT env var.");
+  } else if (serviceAccountBase64) {
+    const decoded = Buffer.from(serviceAccountBase64, "base64").toString("utf8");
+    const serviceAccount = JSON.parse(decoded);
+    firebaseApp = initializeApp({
+      credential: cert(serviceAccount),
+    });
+    console.log("Firebase Admin SDK initialized successfully with FIREBASE_SERVICE_ACCOUNT_BASE64 env var.");
   } else {
+    let serviceAccount: any = null;
     try {
-      const serviceAccount = require("../config/service-account.json");
-      firebaseApp = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      });
-      console.log("Firebase Admin SDK initialized with local service-account.json");
+      serviceAccount = require("../config/service-account.json");
     } catch {
-      console.log("Firebase Admin SDK: FIREBASE_SERVICE_ACCOUNT env or config/service-account.json not provided.");
+      try {
+        const configDir = path.join(__dirname, "../config");
+        const files = fs.readdirSync(configDir);
+        const adminSdkFile = files.find((f) => f.includes("firebase-adminsdk") && f.endsWith(".json"));
+        if (adminSdkFile) {
+          serviceAccount = require(path.join(configDir, adminSdkFile));
+        }
+      } catch {}
+    }
+
+    if (serviceAccount) {
+      firebaseApp = initializeApp({
+        credential: cert(serviceAccount),
+      });
+      console.log("Firebase Admin SDK initialized successfully with local service account JSON.");
+    } else {
+      console.log("Firebase Admin SDK: No service-account.json or FIREBASE_SERVICE_ACCOUNT env key found. Direct FCM v1 requires a service account key.");
     }
   }
 } catch (err: any) {
   console.log("Firebase Admin initialization notice:", err?.message || err);
 }
 
-async function sendFcmMulticast(tokens: string[], title: string, body: string, data?: Record<string, any>) {
-  if (!firebaseApp || tokens.length === 0) return;
+
+async function sendFcmMulticast(tokens: string[], title: string, body: string, data?: Record<string, any>): Promise<boolean> {
+  if (!firebaseApp || tokens.length === 0) return false;
   try {
     const stringData: Record<string, string> = {
       title,
@@ -44,11 +71,14 @@ async function sendFcmMulticast(tokens: string[], title: string, body: string, d
       });
     }
 
+    const imageUrl = data?.imageUrl ? String(data.imageUrl) : undefined;
+
     const message: any = {
       tokens,
       notification: {
         title,
         body,
+        ...(imageUrl ? { imageUrl } : {}),
       },
       android: {
         priority: "high",
@@ -58,6 +88,9 @@ async function sendFcmMulticast(tokens: string[], title: string, body: string, d
           priority: "max",
           defaultSound: true,
           defaultVibrateTimings: true,
+          icon: "ic_launcher",
+          color: "#0d9488",
+          ...(imageUrl ? { imageUrl } : {}),
         },
       },
       apns: {
@@ -67,57 +100,28 @@ async function sendFcmMulticast(tokens: string[], title: string, body: string, d
             badge: 1,
           },
         },
+        ...(imageUrl ? { fcmOptions: { imageUrl } } : {}),
       },
       data: stringData,
     };
 
-    const response = await admin.messaging().sendEachForMulticast(message);
+    const messaging = getMessaging(firebaseApp);
+    const response = await messaging.sendEachForMulticast(message);
     console.log(`Firebase FCM multicast sent to ${tokens.length} devices. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+    return response.successCount > 0;
   } catch (err: any) {
-    console.error("Firebase FCM send error:", err?.message || err);
+    console.log("Firebase FCM multicast notice (falling back to FCM HTTP API):", err?.message || err);
+    return false;
   }
 }
 
+
 async function sendRawFcmNotification(pushToken: string, title: string, body: string, data?: Record<string, any>) {
   if (firebaseApp) {
-    await sendFcmMulticast([pushToken], title, body, data);
-    return;
+    const success = await sendFcmMulticast([pushToken], title, body, data);
+    if (success) return;
   }
-  try {
-    const fcmServerKey = process.env.FCM_SERVER_KEY || "AIzaSyA1gQdY4LTxWRzRQmmJfOHdcAfwtQi6JRo";
-    const payload = {
-      to: pushToken,
-      priority: "high",
-      content_available: true,
-      notification: {
-        title,
-        body,
-        sound: "default",
-        badge: 1,
-        channel_id: "default",
-        android_channel_id: "default",
-      },
-      data: {
-        ...(data || {}),
-        title,
-        body,
-      },
-    };
-
-    const res = await fetch("https://fcm.googleapis.com/fcm/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `key=${fcmServerKey}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const resText = await res.text();
-    console.log(`Raw FCM push status (${pushToken.substring(0, 15)}...):`, res.status, resText);
-  } catch (err: any) {
-    console.error("Error sending raw FCM notification:", err?.message || err);
-  }
+  console.log(`Notice: FCM token (${pushToken.substring(0, 15)}...) requires Firebase Admin SDK service account key for direct FCM v1 delivery.`);
 }
 
 export async function sendPushNotificationToAll(
@@ -157,6 +161,7 @@ export async function sendPushNotificationToAll(
     for (const rawToken of tokens) {
       const pushToken = String(rawToken || "").trim();
       if (!pushToken) continue;
+      
       if (pushToken.startsWith("ExponentPushToken") || pushToken.startsWith("ExpoPushToken")) {
         expoMessages.push({
           to: pushToken,
@@ -167,7 +172,10 @@ export async function sendPushNotificationToAll(
           body,
           data: data || {},
           badge: 1,
-        });
+          icon: "./assets/icon.png",
+          color: "#0d9488",
+          _displayInForeground: true,
+        } as any);
       } else {
         rawFcmTokens.push(pushToken);
       }
@@ -178,7 +186,7 @@ export async function sendPushNotificationToAll(
       for (const chunk of chunks) {
         try {
           const receipts = await expo.sendPushNotificationsAsync(chunk);
-          console.log(`Expo push notifications sent to ${receipts.length} devices.`);
+          console.log(`Expo push notifications sent to ${receipts.length} devices:`, JSON.stringify(receipts));
         } catch (error) {
           console.error("Error sending push notification chunk:", error);
         }
@@ -188,7 +196,7 @@ export async function sendPushNotificationToAll(
     if (rawFcmTokens.length > 0) {
       console.log(`Sending direct FCM notifications to ${rawFcmTokens.length} raw FCM device tokens...`);
       for (const fcmToken of rawFcmTokens) {
-        void sendRawFcmNotification(fcmToken, title, body, data);
+        await sendRawFcmNotification(fcmToken, title, body, data);
       }
     }
   } catch (error) {
@@ -223,6 +231,7 @@ export async function sendPushNotificationToUser(
     for (const rawToken of tokens) {
       const pushToken = String(rawToken || "").trim();
       if (!pushToken) continue;
+
       if (pushToken.startsWith("ExponentPushToken") || pushToken.startsWith("ExpoPushToken")) {
         expoMessages.push({
           to: pushToken,
@@ -233,7 +242,10 @@ export async function sendPushNotificationToUser(
           body,
           data: data || {},
           badge: 1,
-        });
+          icon: "./assets/icon.png",
+          color: "#0d9488",
+          _displayInForeground: true,
+        } as any);
       } else {
         rawFcmTokens.push(pushToken);
       }
@@ -242,13 +254,18 @@ export async function sendPushNotificationToUser(
     if (expoMessages.length > 0) {
       const chunks = expo.chunkPushNotifications(expoMessages);
       for (const chunk of chunks) {
-        await expo.sendPushNotificationsAsync(chunk);
+        try {
+          const receipts = await expo.sendPushNotificationsAsync(chunk);
+          console.log(`Expo targeted push notification sent:`, JSON.stringify(receipts));
+        } catch (err) {
+          console.error("Targeted Expo push error:", err);
+        }
       }
     }
 
     if (rawFcmTokens.length > 0) {
       for (const fcmToken of rawFcmTokens) {
-        void sendRawFcmNotification(fcmToken, title, body, data);
+        await sendRawFcmNotification(fcmToken, title, body, data);
       }
     }
   } catch (error) {

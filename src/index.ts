@@ -45,7 +45,7 @@ async function startServer() {
   app.use("/friends", friendRoutes);
   app.use("/api/friends", friendRoutes);
 
-  app.listen(PORT, () => {
+  app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
   });
 }

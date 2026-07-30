@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import User from "../models/User";
 import Chat from "../models/Chat";
 import { AuthRequest } from "../middlewares/auth.middleware";
+import { sendPushNotificationToUser } from "../services/pushNotification.service";
 
 const toObjectId = (value: string) => {
   if (!mongoose.isObjectIdOrHexString(value)) return null;
@@ -56,6 +57,14 @@ export const searchUsers = async (req: AuthRequest, res: Response) => {
   }
 };
 
+const formatUserPresence = (doc: any) => {
+  if (!doc) return doc;
+  const user = doc.toObject ? doc.toObject() : doc;
+  const lastActiveTime = user.lastActive ? new Date(user.lastActive).getTime() : 0;
+  const isOnline = Boolean(user.isOnline) && Date.now() - lastActiveTime < 30000;
+  return { ...user, isOnline };
+};
+
 export const getFriends = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.userId) {
@@ -70,11 +79,32 @@ export const getFriends = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
+    const friendsWithUnread = await Promise.all(
+      (user.friends || []).map(async (friendDoc: any) => {
+        const f = formatUserPresence(friendDoc);
+        const chat = await Chat.findOne({
+          participants: { $all: [user._id, friendDoc._id], $size: 2 },
+        }).select("messages").lean();
+        let unreadCount = 0;
+        if (chat && chat.messages) {
+          chat.messages.forEach((msg: any) => {
+            const senderId = msg.sender ? String(msg.sender) : "";
+            if (senderId !== String(user._id) && !msg.isRead) {
+              unreadCount += 1;
+            }
+          });
+        }
+        return { ...f, unreadCount };
+      })
+    );
+    const incomingRequests = (user.friendRequestsReceived || []).map(formatUserPresence);
+    const sentRequests = (user.friendRequestsSent || []).map(formatUserPresence);
+
     return res.json({
       success: true,
-      friends: user.friends || [],
-      incomingRequests: user.friendRequestsReceived || [],
-      sentRequests: user.friendRequestsSent || [],
+      friends: friendsWithUnread,
+      incomingRequests,
+      sentRequests,
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Unable to load friends" });
@@ -138,6 +168,13 @@ export const sendFriendRequest = async (req: AuthRequest, res: Response) => {
 
     await user.save();
     await friend.save();
+
+    await sendPushNotificationToUser(
+      String(friend._id),
+      "🤝 New Friend Request",
+      `${user.fullName || "A community member"} sent you a friend request.`,
+      { targetTab: "friends", senderId: String(user._id) }
+    );
 
     return res.json({ success: true, message: "Friend request sent" });
   } catch (err: any) {
@@ -247,6 +284,13 @@ export const acceptFriendRequest = async (req: AuthRequest, res: Response) => {
     await user.save();
     await requester.save();
 
+    await sendPushNotificationToUser(
+      String(requester._id),
+      "🤝 Friend Request Accepted",
+      `${user.fullName || "A community member"} accepted your friend request.`,
+      { targetTab: "friends", senderId: String(user._id) }
+    );
+
     return res.json({ success: true, message: "Friend request accepted" });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Unable to accept friend request" });
@@ -316,7 +360,21 @@ export const getUserChats = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    return res.json({ success: true, chats });
+    const formattedChats = chats.map((c: any) => {
+      const chatObj = c.toObject ? c.toObject() : { ...c };
+      chatObj.participants = (chatObj.participants || []).map(formatUserPresence);
+      let unreadCount = 0;
+      (chatObj.messages || []).forEach((m: any) => {
+        const senderId = m.sender?._id ? String(m.sender._id) : String(m.sender);
+        if (senderId !== String(req.userId) && !m.isRead) {
+          unreadCount += 1;
+        }
+      });
+      (chatObj as any).unreadCount = unreadCount;
+      return chatObj;
+    });
+
+    return res.json({ success: true, chats: formattedChats });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Unable to load chats" });
   }
@@ -342,13 +400,14 @@ export const getOrCreateChat = async (req: AuthRequest, res: Response) => {
       .populate("messages.sender", "fullName username email profilePhotoUrl");
 
     if (chat) {
-      // Only mark messages received by req.userId as delivered. Read state is set when the chat is actually viewed by the user.
+      // Mark messages received by req.userId as delivered and read when opening the chat room.
       let modified = false;
       chat.messages.forEach((msg: any) => {
         const senderId = msg.sender?._id ? String(msg.sender._id) : String(msg.sender);
         if (senderId !== String(req.userId)) {
-          if (!msg.isDelivered) {
+          if (!msg.isDelivered || !msg.isRead) {
             msg.isDelivered = true;
+            msg.isRead = true;
             modified = true;
           }
         }
@@ -356,13 +415,21 @@ export const getOrCreateChat = async (req: AuthRequest, res: Response) => {
       if (modified) {
         await chat.save();
       }
-      return res.json({ success: true, chat });
+      const chatObj = chat.toObject ? chat.toObject() : chat;
+      chatObj.participants = (chatObj.participants || []).map(formatUserPresence);
+      chatObj.messages = (chatObj.messages || []).filter((m: any) => {
+        const deletedFor = (m.deletedFor || []).map((id: any) => String(id._id || id));
+        return !deletedFor.includes(String(req.userId));
+      });
+      return res.json({ success: true, chat: chatObj });
     }
 
     const newChat = await Chat.create({ participants: participantIds, messages: [] });
     await newChat.populate("participants", "fullName username email mobile profilePhotoUrl isOnline lastActive");
 
-    return res.json({ success: true, chat: newChat });
+    const newChatObj = newChat.toObject ? newChat.toObject() : newChat;
+    newChatObj.participants = (newChatObj.participants || []).map(formatUserPresence);
+    return res.json({ success: true, chat: newChatObj });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Unable to open chat" });
   }
@@ -404,9 +471,109 @@ export const getChatMessages = async (req: AuthRequest, res: Response) => {
       await chat.save();
     }
 
-    return res.json({ success: true, messages: chat.messages || [] });
+    const filteredMessages = (chat.messages || []).filter((m: any) => {
+      const deletedFor = (m.deletedFor || []).map((id: any) => String(id._id || id));
+      return !deletedFor.includes(String(req.userId));
+    });
+
+    return res.json({ success: true, messages: filteredMessages });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Unable to load messages" });
+  }
+};
+
+export const getUnreadChatCount = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.json({ success: true, unreadCount: 0, totalUnreadMessages: 0 });
+    }
+
+    const chats = await Chat.find({ participants: req.userId })
+      .populate("participants", "fullName username profilePhotoUrl")
+      .populate("messages.sender", "fullName username profilePhotoUrl")
+      .lean();
+
+    let unreadChatsCount = 0;
+    let totalUnreadMessages = 0;
+    let latestUnreadMsg: any = null;
+    let latestUnreadTime = 0;
+
+    for (const chat of chats) {
+      const unreadMsgs = (chat.messages || []).filter((msg: any) => {
+        const senderId = msg.sender?._id ? String(msg.sender._id) : String(msg.sender || "");
+        return senderId !== String(req.userId) && !msg.isRead;
+      });
+
+      if (unreadMsgs.length > 0) {
+        unreadChatsCount += 1;
+        totalUnreadMessages += unreadMsgs.length;
+        const lastUnread = unreadMsgs[unreadMsgs.length - 1];
+        const msgTime = new Date(lastUnread.createdAt || Date.now()).getTime();
+        if (msgTime > latestUnreadTime) {
+          latestUnreadTime = msgTime;
+          const senderObj: any = typeof lastUnread.sender === "object" ? lastUnread.sender : null;
+          const senderName = senderObj?.fullName || senderObj?.username || "Community Friend";
+          const senderId = senderObj?._id ? String(senderObj._id) : String(lastUnread.sender || "");
+          const msgId = String((lastUnread as any)._id || (lastUnread as any).id || `${senderId}-${msgTime}`);
+
+
+          latestUnreadMsg = {
+            id: msgId,
+            senderName,
+            text: lastUnread.text || "",
+            senderId,
+            chatId: String(chat._id),
+          };
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      unreadCount: unreadChatsCount,
+      totalUnreadMessages,
+      latestUnreadMessage: latestUnreadMsg,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to count unread chats" });
+  }
+};
+
+export const markChatAsRead = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
+    const friendId = req.params.friendId;
+    const friendObjectId = toObjectId(friendId);
+    if (!friendObjectId) {
+      return res.status(400).json({ success: false, message: "Invalid friend id" });
+    }
+
+    const participantIds = [new mongoose.Types.ObjectId(req.userId), friendObjectId];
+    const chat = await Chat.findOne({
+      participants: { $all: participantIds, $size: 2 },
+    });
+
+    if (chat) {
+      let modified = false;
+      chat.messages.forEach((msg: any) => {
+        const senderId = msg.sender?._id ? String(msg.sender._id) : String(msg.sender);
+        if (senderId !== String(req.userId) && !msg.isRead) {
+          msg.isDelivered = true;
+          msg.isRead = true;
+          modified = true;
+        }
+      });
+      if (modified) {
+        await chat.save();
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to mark chat as read" });
   }
 };
 
@@ -438,11 +605,14 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     }
 
     const partner = chat.participants.find((p: any) => String(p._id || p) !== String(req.userId));
+    const partnerUser = partner ? await User.findById((partner as any)._id || partner).select("isOnline lastActive").lean() : null;
+    const lastActiveTime = partnerUser?.lastActive ? new Date(partnerUser.lastActive).getTime() : 0;
+    const isPartnerOnline = Boolean(partnerUser?.isOnline) && Date.now() - lastActiveTime < 30000;
 
     chat.messages.push({
       sender: new mongoose.Types.ObjectId(req.userId),
       text: text.trim(),
-      isDelivered: false,
+      isDelivered: isPartnerOnline,
       isRead: false,
       createdAt: new Date(),
     } as any);
@@ -452,8 +622,99 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     await chat.populate("participants", "fullName username email mobile profilePhotoUrl isOnline lastActive");
     await chat.populate("messages.sender", "fullName username email profilePhotoUrl");
 
-    return res.status(201).json({ success: true, message: "Message sent", chat });
+    // Send push notification to recipient partner when app is closed / background
+    if (partner) {
+      const recipientId = String((partner as any)._id || partner);
+      const senderUser = await User.findById(req.userId).select("fullName username").lean();
+      const senderName = senderUser?.fullName || senderUser?.username || "Community Friend";
+      await sendPushNotificationToUser(
+        recipientId,
+        `💬 ${senderName}`,
+        text.trim(),
+        {
+          targetTab: "chat",
+          targetId: String(req.userId),
+          chatId: String(chat._id),
+          senderId: String(req.userId),
+        }
+      );
+    }
+
+    const chatObj = chat.toObject ? chat.toObject() : chat;
+    chatObj.messages = (chatObj.messages || []).filter((m: any) => {
+      const deletedFor = (m.deletedFor || []).map((id: any) => String(id._id || id));
+      return !deletedFor.includes(String(req.userId));
+    });
+
+    return res.status(201).json({ success: true, message: "Message sent", chat: chatObj });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Unable to send message" });
+  }
+};
+
+export const deleteMessage = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
+    const { chatId, messageId } = req.params;
+    const { deleteType } = req.body || {}; // "me" | "everyone"
+
+    if (!mongoose.isObjectIdOrHexString(chatId) || !mongoose.isObjectIdOrHexString(messageId)) {
+      return res.status(400).json({ success: false, message: "Invalid parameters" });
+    }
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ success: false, message: "Chat not found" });
+    }
+
+    const isParticipant = chat.participants.some(
+      (p: any) => String(p._id || p) === String(req.userId)
+    );
+    if (!isParticipant) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    const message = chat.messages.find(
+      (m: any) => String(m._id || m.id) === String(messageId)
+    );
+    if (!message) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+
+    const senderId = message.sender?._id ? String(message.sender._id) : String(message.sender);
+    const isSender = senderId === String(req.userId);
+
+    if (deleteType === "everyone") {
+      if (!isSender) {
+        return res.status(403).json({ success: false, message: "You can only delete your own messages for everyone" });
+      }
+
+      const hoursDiff = (Date.now() - new Date(message.createdAt || Date.now()).getTime()) / (1000 * 60 * 60);
+      if (hoursDiff > 24) {
+        return res.status(400).json({ success: false, message: "Messages can only be deleted for everyone within 24 hours" });
+      }
+
+      // Permanent hard delete from MongoDB array (frees up DB storage permanently)
+      chat.messages = chat.messages.filter(
+        (m: any) => String(m._id || m.id) !== String(messageId)
+      ) as any;
+    } else {
+      // Permanent hard delete from MongoDB array for user (frees up DB storage permanently)
+      chat.messages = chat.messages.filter(
+        (m: any) => String(m._id || m.id) !== String(messageId)
+      ) as any;
+    }
+
+    await chat.save();
+    await chat.populate("participants", "fullName username email mobile profilePhotoUrl isOnline lastActive");
+    await chat.populate("messages.sender", "fullName username email profilePhotoUrl");
+
+    return res.json({ success: true, message: "Message permanently deleted from database", chat });
+
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to delete message" });
   }
 };

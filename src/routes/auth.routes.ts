@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { register, login, getMe, updateMe, updateProfilePhoto, listUsers, updateUserRole, removeUser, listCommunityGroups, createCommunityGroup, sendOtp, verifyOtp, resetPassword, checkUsername } from "../controllers/auth.controller";
+import { register, login, logout, forceLogoutAllUsers, getMe, updateMe, updateProfilePhoto, listUsers, updateUserRole, removeUser, listCommunityGroups, createCommunityGroup, sendOtp, verifyOtp, resetPassword, checkUsername } from "../controllers/auth.controller";
 import { authMiddleware, adminMiddleware, superAdminMiddleware } from "../middlewares/auth.middleware";
 import { uploadProfilePhoto } from "../middlewares/upload.middleware";
 
@@ -30,6 +30,8 @@ router.post("/otp/send", sendOtp);
 router.post("/otp/verify", verifyOtp);
 router.post("/password/reset", resetPassword);
 router.post("/login", login);
+router.post("/logout", authMiddleware, logout);
+router.post("/force-logout-all", authMiddleware, superAdminMiddleware, forceLogoutAllUsers);
 router.get("/me", authMiddleware, getMe);
 router.put("/me", authMiddleware, updateMe);
 router.post("/me/photo", authMiddleware, handleProfilePhotoUpload, updateProfilePhoto);

@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import User from "../models/User";
+import Chat from "../models/Chat";
 import { login, register } from "../controllers/auth.controller";
 
 const router = express.Router();
@@ -60,6 +61,14 @@ router.post(["/presence", "/users/presence", "/heartbeat"], authMiddleware, asyn
       },
       { new: true }
     ).select("isOnline lastActive");
+
+    if (isOnline) {
+      void Chat.updateMany(
+        { participants: userId, "messages.sender": { $ne: userId }, "messages.isDelivered": false },
+        { $set: { "messages.$[elem].isDelivered": true } },
+        { arrayFilters: [{ "elem.sender": { $ne: userId }, "elem.isDelivered": false }] }
+      ).catch(() => {});
+    }
 
     return res.status(200).json({ success: true, isOnline: updatedUser?.isOnline, lastActive: updatedUser?.lastActive });
   } catch (error: any) {

@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 import User from "../models/User";
+import Chat from "../models/Chat";
 import CommunityGroup from "../models/CommunityGroup";
 import CommunityProfile from "../models/CommunityProfile";
 import Otp from "../models/Otp";
@@ -360,7 +362,22 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "secret");
+    const activeSessionId = new mongoose.Types.ObjectId().toString();
+    user.activeSessionId = activeSessionId;
+    user.isOnline = true;
+    user.lastActive = new Date();
+    await user.save();
+
+    await Chat.updateMany(
+      { participants: user._id, "messages.sender": { $ne: user._id }, "messages.isDelivered": false },
+      { $set: { "messages.$[elem].isDelivered": true } },
+      { arrayFilters: [{ "elem.sender": { $ne: user._id }, "elem.isDelivered": false }] }
+    ).catch(() => {});
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role, activeSessionId },
+      process.env.JWT_SECRET || "secret"
+    );
 
     return res.json({
       success: true,
@@ -372,6 +389,40 @@ export const login = async (req: Request, res: Response) => {
       success: false,
       message: "Server error",
     });
+  }
+};
+
+export const logout = async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userId) {
+      await User.findByIdAndUpdate(req.userId, {
+        activeSessionId: new mongoose.Types.ObjectId().toString(),
+        isOnline: false,
+        lastActive: new Date(Date.now() - 120000),
+        $unset: { pushToken: 1 },
+      });
+    }
+    return res.json({ success: true, message: "Logged out successfully" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const forceLogoutAllUsers = async (req: AuthRequest, res: Response) => {
+  try {
+    const users = await User.find();
+    for (const u of users) {
+      u.activeSessionId = new mongoose.Types.ObjectId().toString();
+      u.isOnline = false;
+      u.pushToken = undefined;
+      await u.save();
+    }
+    return res.json({
+      success: true,
+      message: `Successfully logged out all ${users.length} users from all devices.`,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Failed to force logout users" });
   }
 };
 

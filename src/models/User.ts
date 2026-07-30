@@ -18,6 +18,7 @@ export interface IUser extends Document {
   friendRequestsReceived?: Types.ObjectId[];
   isOnline?: boolean;
   lastActive?: Date;
+  activeSessionId?: string;
 }
 
 const normalizeRoleValue = (role?: string) => {
@@ -62,6 +63,7 @@ const UserSchema = new Schema<IUser>(
     friendRequestsReceived: [{ type: Schema.Types.ObjectId, ref: "User" }],
     isOnline: { type: Boolean, default: false },
     lastActive: { type: Date, default: Date.now },
+    activeSessionId: { type: String },
 
     role: {
       type: String,

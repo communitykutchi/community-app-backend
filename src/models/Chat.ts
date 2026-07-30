@@ -6,6 +6,8 @@ export interface IMessage {
   text: string;
   isDelivered?: boolean;
   isRead?: boolean;
+  deletedFor?: Types.ObjectId[];
+  isDeletedForEveryone?: boolean;
   createdAt?: Date;
 }
 
@@ -22,6 +24,8 @@ const MessageSchema = new Schema(
     text: { type: String, required: true, trim: true },
     isDelivered: { type: Boolean, default: false },
     isRead: { type: Boolean, default: false },
+    deletedFor: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    isDeletedForEveryone: { type: Boolean, default: false },
     createdAt: { type: Date, default: () => new Date() },
   },
   { _id: true }
