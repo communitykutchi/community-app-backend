@@ -394,14 +394,35 @@ export const login = async (req: Request, res: Response) => {
 
 export const logout = async (req: AuthRequest, res: Response) => {
   try {
-    if (req.userId) {
-      await User.findByIdAndUpdate(req.userId, {
-        activeSessionId: new mongoose.Types.ObjectId().toString(),
-        isOnline: false,
-        lastActive: new Date(Date.now() - 120000),
-        $unset: { pushToken: 1 },
-      });
+    const devicePushToken = req.body?.pushToken || req.query?.pushToken;
+    const userId = req.userId;
+
+    if (userId) {
+      const user = await User.findById(userId);
+      if (user) {
+        user.isOnline = false;
+        user.lastActive = new Date(Date.now() - 120000);
+        user.activeSessionId = new mongoose.Types.ObjectId().toString();
+        user.pushToken = undefined;
+        if (devicePushToken && Array.isArray(user.pushTokens)) {
+          user.pushTokens = user.pushTokens.filter((t) => t !== devicePushToken);
+        } else {
+          user.pushTokens = [];
+        }
+        await user.save();
+      }
     }
+
+    if (devicePushToken) {
+      await User.updateMany(
+        { $or: [{ pushToken: devicePushToken }, { pushTokens: devicePushToken }] },
+        {
+          $unset: { pushToken: 1 },
+          $pull: { pushTokens: devicePushToken },
+        }
+      );
+    }
+
     return res.json({ success: true, message: "Logged out successfully" });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Server error" });

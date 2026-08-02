@@ -66,8 +66,10 @@ export const authMiddleware = async (
   }
 };
 
-const isAdminRole = (role?: string) => ["super_admin", "jamaat_admin", "moderator", "admin"].includes(role || "");
-const isSuperAdminRole = (role?: string) => ["super_admin", "admin"].includes(role || "");
+const isAdminRole = (role?: string) =>
+  ["super_admin", "jamaat_admin", "moderator", "admin"].includes((role || "").trim().toLowerCase());
+const isSuperAdminRole = (role?: string) =>
+  ["super_admin", "admin"].includes((role || "").trim().toLowerCase());
 
 export const adminMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
   if (!req.user || !isAdminRole(req.user.role)) {

@@ -267,6 +267,11 @@ export const togglePinNotice = async (req: AuthRequest, res: Response) => {
 
     const { id } = req.params;
     const { pinned } = req.body;
+
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid notice ID format" });
+    }
+
     const notice = await Notice.findById(id).exec();
     if (!notice) {
       return res.status(404).json({ success: false, message: "Notice not found" });

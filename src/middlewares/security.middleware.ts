@@ -8,12 +8,13 @@ export const securityHeaders = helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 });
 
-// 2. Global API Rate Limiter (300 requests per 15 minutes per IP)
+// 2. Global API Rate Limiter (3000 requests per 15 minutes per IP to support polling & real-time features)
 export const globalRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 3000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === "OPTIONS" || req.path === "/",
   message: {
     success: false,
     code: "TOO_MANY_REQUESTS",
@@ -21,10 +22,10 @@ export const globalRateLimiter = rateLimit({
   },
 });
 
-// 3. Auth Brute-Force Rate Limiter (15 attempts per 15 minutes per IP)
+// 3. Auth Brute-Force Rate Limiter (60 attempts per 15 minutes per IP)
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

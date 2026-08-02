@@ -28,6 +28,15 @@ router.post(["/push-token", "/users/push-token"], authMiddleware, async (req: Au
     const userId = req.userId || req.user?._id || (req.user as any)?.id;
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
+    // Clean up this pushToken from any previous user accounts logged in on this phone
+    await User.updateMany(
+      { _id: { $ne: userId }, $or: [{ pushToken }, { pushTokens: pushToken }] },
+      {
+        $unset: { pushToken: 1 },
+        $pull: { pushTokens: pushToken },
+      }
+    );
+
     await User.findByIdAndUpdate(userId, {
       $set: { pushToken },
       $addToSet: { pushTokens: pushToken },
