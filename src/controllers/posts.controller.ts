@@ -54,6 +54,20 @@ function isOwnerLikeDelete(post: any, currentUserId?: string) {
   return Boolean(authorId && String(authorId) === String(currentUserId));
 }
 
+function getUniqueShareUserIds(shareUserIds: any[]): string[] {
+  const uniqueIds = new Set<string>();
+  if (!Array.isArray(shareUserIds)) return [];
+  for (const item of shareUserIds) {
+    if (!item) continue;
+    const str = String(item);
+    const baseId = str.includes(":") ? str.split(":")[0] : str;
+    if (baseId && baseId !== "anonymous") {
+      uniqueIds.add(baseId);
+    }
+  }
+  return Array.from(uniqueIds);
+}
+
 function serializePost(post: any, currentUserId?: string, requesterRole?: string) {
   const author = typeof post.userId === "object" && post.userId ? post.userId : null;
   const authorId = author?._id ? String(author._id) : post.userId ? String(post.userId) : "";
@@ -61,6 +75,7 @@ function serializePost(post: any, currentUserId?: string, requesterRole?: string
   const authorPhotoUrl = author?.profilePhotoUrl || "";
   const likes = Array.isArray(post.likes) ? post.likes : [];
   const shareUserIds = Array.isArray(post.shareUserIds) ? post.shareUserIds : [];
+  const uniqueShareUserIds = getUniqueShareUserIds(shareUserIds);
   const comments = Array.isArray(post.comments) ? post.comments : [];
   const isOwner = Boolean(currentUserId && authorId && authorId === String(currentUserId));
   const canModerate = isModeratorLikeRole(requesterRole);
@@ -76,9 +91,10 @@ function serializePost(post: any, currentUserId?: string, requesterRole?: string
     authorPhotoUrl,
     likes: likes.length,
     liked: currentUserId ? likes.includes(currentUserId) : false,
+    hasShared: currentUserId ? uniqueShareUserIds.includes(String(currentUserId)) : false,
     canDelete,
     comments: comments.length,
-    shares: shareUserIds.length,
+    shares: uniqueShareUserIds.length,
     commentsList: comments.map((comment: any) => ({
       id: String(comment._id),
       text: comment.comment,
@@ -244,9 +260,12 @@ export const sharePost = async (req: AuthRequest, res: Response) => {
     }
 
     const shareUserIds = post.shareUserIds || [];
-    post.shareUserIds = [...shareUserIds, `${userId}:${Date.now()}`];
+    const uniqueShareUserIds = getUniqueShareUserIds(shareUserIds);
+    if (userId !== "anonymous" && !uniqueShareUserIds.includes(userId)) {
+      post.shareUserIds = [...shareUserIds, userId];
+      await post.save();
+    }
 
-    await post.save();
     await post.populate("userId", "fullName profilePhotoUrl");
 
     return res.json(serializePost(post, userId, req.user?.role));

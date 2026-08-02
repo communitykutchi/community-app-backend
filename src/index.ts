@@ -11,6 +11,7 @@ import userRoutes from "./routes/users.routes";
 import friendRoutes from "./routes/friends.routes";
 import noticeRoutes from "./routes/notices.routes";
 import notificationRoutes from "./routes/notifications.routes";
+import pollRoutes from "./routes/polls.routes";
 import {
   securityHeaders,
   globalRateLimiter,
@@ -55,6 +56,8 @@ async function startServer() {
   app.use("/api", userRoutes);
   app.use("/friends", friendRoutes);
   app.use("/api/friends", friendRoutes);
+  app.use("/polls", pollRoutes);
+  app.use("/api/polls", pollRoutes);
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
