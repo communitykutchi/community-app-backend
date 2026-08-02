@@ -613,7 +613,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     }
 
     const chatId = req.params.chatId;
-    const { text } = req.body;
+    const { text, replyTo } = req.body;
 
     if (!mongoose.isObjectIdOrHexString(chatId)) {
       return res.status(400).json({ success: false, message: "Invalid chat id" });
@@ -641,6 +641,11 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     chat.messages.push({
       sender: new mongoose.Types.ObjectId(req.userId),
       text: text.trim(),
+      replyTo: replyTo && typeof replyTo === "object" ? {
+        _id: String(replyTo._id || ""),
+        text: String(replyTo.text || ""),
+        senderName: String(replyTo.senderName || ""),
+      } : undefined,
       isDelivered: isPartnerOnline,
       isRead: false,
       createdAt: new Date(),

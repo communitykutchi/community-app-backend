@@ -1,9 +1,16 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
 
+export interface IReplyTo {
+  _id?: string;
+  text?: string;
+  senderName?: string;
+}
+
 export interface IMessage {
   _id?: Types.ObjectId;
   sender: Types.ObjectId;
   text: string;
+  replyTo?: IReplyTo;
   isDelivered?: boolean;
   isRead?: boolean;
   deletedFor?: Types.ObjectId[];
@@ -18,10 +25,20 @@ export interface IChat extends Document {
   updatedAt?: Date;
 }
 
+const ReplyToSchema = new Schema(
+  {
+    _id: { type: String },
+    text: { type: String },
+    senderName: { type: String },
+  },
+  { _id: false }
+);
+
 const MessageSchema = new Schema(
   {
     sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
     text: { type: String, required: true, trim: true },
+    replyTo: { type: ReplyToSchema },
     isDelivered: { type: Boolean, default: false },
     isRead: { type: Boolean, default: false },
     deletedFor: [{ type: Schema.Types.ObjectId, ref: "User" }],

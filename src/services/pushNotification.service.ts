@@ -109,6 +109,26 @@ async function sendFcmMulticast(tokens: string[], title: string, body: string, d
     const messaging = getMessaging(firebaseApp);
     const response = await messaging.sendEachForMulticast(message);
     console.log(`Firebase FCM multicast sent to ${tokens.length} devices. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+
+    if (response.failureCount > 0) {
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          const failedToken = tokens[idx];
+          const errCode = resp.error?.code;
+          console.log(`FCM token notice (${failedToken.substring(0, 15)}...):`, errCode || resp.error?.message);
+          if (errCode === "messaging/registration-token-not-registered" || errCode === "messaging/invalid-registration-token") {
+            User.updateMany(
+              { $or: [{ pushToken: failedToken }, { pushTokens: failedToken }] },
+              {
+                $unset: { pushToken: 1 },
+                $pull: { pushTokens: failedToken },
+              }
+            ).catch(() => {});
+          }
+        }
+      });
+    }
+
     return response.successCount > 0;
   } catch (err: any) {
     console.log("Firebase FCM multicast notice (falling back to FCM HTTP API):", err?.message || err);
