@@ -19,6 +19,9 @@ export interface IUser extends Document {
   isOnline?: boolean;
   lastActive?: Date;
   activeSessionId?: string;
+  isBanned?: boolean;
+  bannedUntil?: Date;
+  banDuration?: string;
 }
 
 const normalizeRoleValue = (role?: string) => {
@@ -64,6 +67,9 @@ const UserSchema = new Schema<IUser>(
     isOnline: { type: Boolean, default: false },
     lastActive: { type: Date, default: Date.now },
     activeSessionId: { type: String },
+    isBanned: { type: Boolean, default: false },
+    bannedUntil: { type: Date },
+    banDuration: { type: String },
 
     role: {
       type: String,

@@ -82,10 +82,14 @@ function serializePost(post: any, currentUserId?: string, requesterRole?: string
   const isSuperAdmin = String(requesterRole || "") === "super_admin";
   const canDelete = isOwner || isSuperAdmin || (canModerate && isOwnerLikeDelete(post, currentUserId));
 
+  const mediaList = (post.media || []).filter((item: any) => isCloudinaryUrl(item?.url));
+
   return {
     _id: post._id,
-    text: post.text,
-    media: (post.media || []).filter((item: any) => isCloudinaryUrl(item?.url)),
+    text: post.text || post.content || "",
+    content: post.text || post.content || "",
+    media: mediaList,
+    mediaUrls: mediaList.map((item: any) => item.url),
     createdAt: post.createdAt,
     authorName,
     authorPhotoUrl,
@@ -121,8 +125,8 @@ export const createPost = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, message: "Please login to create a post." });
     }
 
-    if (!isModeratorLikeRole(requesterRole)) {
-      return res.status(403).json({ success: false, message: "Only super admins and moderators can create posts." });
+    if (String(req.user?.role || "").toLowerCase() === "banned") {
+      return res.status(403).json({ success: false, message: "Your account is banned from creating posts." });
     }
 
     if (!text || typeof text !== "string" || !text.trim()) {

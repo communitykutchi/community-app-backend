@@ -54,6 +54,23 @@ export const authMiddleware = async (
       });
     }
 
+    if ((user as any).isBanned) {
+      if ((user as any).bannedUntil && new Date() > new Date((user as any).bannedUntil)) {
+        (user as any).isBanned = false;
+        (user as any).bannedUntil = null;
+        (user as any).banDuration = null;
+        await user.save();
+      } else {
+        return res.status(403).json({
+          success: false,
+          code: "ACCOUNT_BANNED",
+          message: "Your account is suspended by administrator.",
+          banDuration: (user as any).banDuration || "permanent",
+          bannedUntil: (user as any).bannedUntil || null,
+        });
+      }
+    }
+
     req.userId = String(resolvedUserId);
     req.user = user;
     return next();

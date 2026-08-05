@@ -5,6 +5,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import connectDB from "./config/db";
 import postRoutes from "./routes/posts.routes";
+import { ensureDefaultAdmin } from "./controllers/auth.controller";
 import { removeOrphanPosts } from "./controllers/posts.controller";
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/users.routes";
@@ -38,6 +39,7 @@ async function startServer() {
   const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/community';
 
   await connectDB(mongoUri);
+  await ensureDefaultAdmin().catch((err) => console.log("[Startup] ensureDefaultAdmin notice:", err?.message || err));
   await removeOrphanPosts();
 
   app.get("/", (req, res) => {
