@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 
 const getBaseUrl = () => {
-  return process.env.BACKEND_URL || process.env.API_BASE_URL || "http://localhost:5000";
+  return process.env.BACKEND_URL || process.env.API_BASE_URL || "https://backend.kutchicommunity.com";
 };
 
 export const getUploadDir = () => {

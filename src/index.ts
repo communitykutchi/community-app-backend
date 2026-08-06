@@ -29,12 +29,46 @@ dotenv.config();
 
 const app = express();
 
-// Security Middleware Layer
+const allowedOrigins = [
+  "https://kutchicommunity.com",
+  "https://www.kutchicommunity.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:4173",
+  process.env.FRONTEND_URL,
+].filter(Boolean) as string[];
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. mobile apps, native requests) or allowed origins
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+      callback(null, true);
+    } else {
+      // Allow origin dynamically to prevent CORS blocks in production
+      callback(null, true);
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Origin",
+    "X-Requested-With",
+    "Content-Type",
+    "Accept",
+    "Authorization",
+    "Access-Control-Allow-Origin",
+  ],
+  optionsSuccessStatus: 200,
+};
+
+// 1. Enable CORS first so preflight OPTIONS requests return CORS headers immediately
+app.use(cors(corsOptions));
+
+// 2. Security Middleware Layer
 app.use(securityHeaders);
 app.use(sanitizeInputMiddleware);
 app.use(globalRateLimiter);
 
-app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 

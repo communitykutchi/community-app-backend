@@ -28,6 +28,7 @@ export const authRateLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === "OPTIONS",
   message: {
     success: false,
     code: "TOO_MANY_AUTH_ATTEMPTS",
