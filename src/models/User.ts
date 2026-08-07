@@ -7,8 +7,12 @@ export interface IUser extends Document {
   cnic?: string;
   mobile?: string;
   email?: string;
+  country?: string;
+  city?: string;
   profilePhotoUrl?: string;
   profilePhotoPublicId?: string;
+  coverPhotoUrl?: string;
+  coverPhotoPublicId?: string;
   password: string;
   role: "super_admin" | "moderator" | "member" | "admin";
   pushToken?: string;
@@ -22,16 +26,17 @@ export interface IUser extends Document {
   isBanned?: boolean;
   bannedUntil?: Date;
   banDuration?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const normalizeRoleValue = (role?: string) => {
   const normalized = String(role || "").trim().toLowerCase();
-  if (normalized === "jamaat_admin") return "moderator";
-  if (normalized === "jamaat-admin") return "moderator";
   if (normalized === "superadmin" || normalized === "super_admin") return "super_admin";
-  if (normalized === "mod" || normalized === "moderator") return "moderator";
   if (normalized === "admin") return "admin";
-  return normalized || "member";
+  if (normalized === "mod" || normalized === "moderator") return "moderator";
+  if (["super_admin", "admin", "moderator", "member"].includes(normalized)) return normalized as any;
+  return "member";
 };
 
 const UserSchema = new Schema<IUser>(
@@ -54,8 +59,13 @@ const UserSchema = new Schema<IUser>(
 
     email: { type: String, unique: true, sparse: true },
 
+    country: { type: String, default: "Pakistan" },
+    city: { type: String, default: "Karachi" },
+
     profilePhotoUrl: { type: String },
     profilePhotoPublicId: { type: String },
+    coverPhotoUrl: { type: String },
+    coverPhotoPublicId: { type: String },
 
     password: { type: String, required: true },
 

@@ -8,6 +8,7 @@ try {
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "path";
 import connectDB from "./config/db";
 import postRoutes from "./routes/posts.routes";
 import { ensureDefaultAdmin } from "./controllers/auth.controller";
@@ -18,6 +19,8 @@ import friendRoutes from "./routes/friends.routes";
 import noticeRoutes from "./routes/notices.routes";
 import notificationRoutes from "./routes/notifications.routes";
 import pollRoutes from "./routes/polls.routes";
+import jobRoutes from "./routes/jobs.routes";
+import storageRoutes from "./routes/storage.routes";
 import {
   securityHeaders,
   globalRateLimiter,
@@ -40,12 +43,10 @@ const allowedOrigins = [
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. mobile apps, native requests) or allowed origins
-    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith("http://localhost")) {
       callback(null, true);
     } else {
-      // Allow origin dynamically to prevent CORS blocks in production
-      callback(null, true);
+      callback(null, true); // Allow mobile app native requests
     }
   },
   credentials: true,
@@ -69,8 +70,8 @@ app.use(securityHeaders);
 app.use(sanitizeInputMiddleware);
 app.use(globalRateLimiter);
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
 const PORT = process.env.PORT || 5000;
 
@@ -99,6 +100,11 @@ async function startServer() {
   app.use("/api/friends", friendRoutes);
   app.use("/polls", pollRoutes);
   app.use("/api/polls", pollRoutes);
+  app.use("/jobs", jobRoutes);
+  app.use("/api/jobs", jobRoutes);
+  app.use("/storage", storageRoutes);
+  app.use("/api/storage", storageRoutes);
+  app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
@@ -109,4 +115,3 @@ startServer().catch((err) => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
-

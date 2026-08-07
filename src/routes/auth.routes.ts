@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { register, login, logout, forceLogoutAllUsers, getMe, updateMe, updateProfilePhoto, listUsers, updateUserRole, removeUser, listCommunityGroups, createCommunityGroup, sendOtp, verifyOtp, resetPassword, checkUsername, toggleBanUser, getSuperAdminAnalytics, submitReport, getReports, resolveReport } from "../controllers/auth.controller";
+import { register, login, logout, forceLogoutAllUsers, getMe, updateMe, updateProfilePhoto, updateCoverPhoto, listUsers, updateUserRole, removeUser, listCommunityGroups, createCommunityGroup, deleteCommunityGroup, sendOtp, verifyOtp, resetPassword, checkUsername, toggleBanUser, getSuperAdminAnalytics, submitReport, getReports, resolveReport, deleteReport } from "../controllers/auth.controller";
 import { authMiddleware, adminMiddleware, superAdminMiddleware } from "../middlewares/auth.middleware";
 import { uploadProfilePhoto } from "../middlewares/upload.middleware";
 
@@ -35,15 +35,20 @@ router.post("/force-logout-all", authMiddleware, superAdminMiddleware, forceLogo
 router.get("/me", authMiddleware, getMe);
 router.put("/me", authMiddleware, updateMe);
 router.post("/me/photo", authMiddleware, handleProfilePhotoUpload, updateProfilePhoto);
+router.post("/me/cover", authMiddleware, handleProfilePhotoUpload, updateCoverPhoto);
 router.get("/users", authMiddleware, adminMiddleware, listUsers);
 router.put("/users/:userId/role", authMiddleware, adminMiddleware, updateUserRole);
 router.put("/users/:userId/ban", authMiddleware, superAdminMiddleware, toggleBanUser);
+router.post("/users/:userId/ban", authMiddleware, superAdminMiddleware, toggleBanUser);
+router.post("/users/:userId/unban", authMiddleware, superAdminMiddleware, toggleBanUser);
 router.delete("/users/:userId", authMiddleware, superAdminMiddleware, removeUser);
 router.get("/groups", authMiddleware, listCommunityGroups);
 router.post("/groups", authMiddleware, superAdminMiddleware, createCommunityGroup);
+router.delete("/groups/:name", authMiddleware, superAdminMiddleware, deleteCommunityGroup);
 router.get("/analytics", authMiddleware, superAdminMiddleware, getSuperAdminAnalytics);
 router.post("/reports", authMiddleware, submitReport);
 router.get("/reports", authMiddleware, superAdminMiddleware, getReports);
 router.put("/reports/:reportId/resolve", authMiddleware, superAdminMiddleware, resolveReport);
+router.delete("/reports/:reportId", authMiddleware, superAdminMiddleware, deleteReport);
 
 export default router;

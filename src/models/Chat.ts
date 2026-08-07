@@ -9,7 +9,11 @@ export interface IReplyTo {
 export interface IMessage {
   _id?: Types.ObjectId;
   sender: Types.ObjectId;
-  text: string;
+  text?: string;
+  audioUrl?: string;
+  audioDuration?: number;
+  mediaUrl?: string;
+  mediaType?: "audio" | "image" | "video" | "document";
   replyTo?: IReplyTo;
   isDelivered?: boolean;
   isRead?: boolean;
@@ -37,7 +41,11 @@ const ReplyToSchema = new Schema(
 const MessageSchema = new Schema(
   {
     sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    text: { type: String, required: true, trim: true },
+    text: { type: String, default: "", trim: true },
+    audioUrl: { type: String },
+    audioDuration: { type: Number },
+    mediaUrl: { type: String },
+    mediaType: { type: String, enum: ["audio", "image", "video", "document"] },
     replyTo: { type: ReplyToSchema },
     isDelivered: { type: Boolean, default: false },
     isRead: { type: Boolean, default: false },

@@ -22,13 +22,20 @@ export const globalRateLimiter = rateLimit({
   },
 });
 
-// 3. Auth Brute-Force Rate Limiter (60 attempts per 15 minutes per IP)
+// 3. Auth Brute-Force Rate Limiter (Skipping session checks & polling routes)
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 60,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.method === "OPTIONS",
+  skip: (req) =>
+    req.method === "OPTIONS" ||
+    req.path === "/me" ||
+    req.path === "/check-username" ||
+    req.path === "/users" ||
+    req.path === "/groups" ||
+    req.path === "/analytics" ||
+    req.path === "/reports",
   message: {
     success: false,
     code: "TOO_MANY_AUTH_ATTEMPTS",

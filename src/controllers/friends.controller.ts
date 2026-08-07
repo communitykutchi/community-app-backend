@@ -11,10 +11,13 @@ const toObjectId = (value: string) => {
 };
 
 const buildUserSearchQuery = (query: string, userId: string | undefined) => {
-  const regex = new RegExp(query, "i");
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(escapedQuery, "i");
   return {
     $and: [
       { _id: { $ne: userId } },
+      { role: { $ne: "super_admin" } },
+      { username: { $ne: "superadmin" } },
       {
         $or: [
           { fullName: regex },
@@ -34,24 +37,52 @@ export const searchUsers = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: "Search query is required" });
     }
 
-    const regex = new RegExp(query, "i");
-    const users = await User.find({
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escapedQuery, "i");
+
+    const isEmailSearch = query.includes("@");
+    const isNumberSearch = /^\+?\d+$/.test(query);
+
+    const searchConditions: any[] = [
+      { fullName: regex },
+      { username: regex },
+    ];
+
+    if (isEmailSearch) {
+      searchConditions.push({ email: regex });
+    }
+    if (isNumberSearch) {
+      searchConditions.push({ mobile: regex });
+    }
+
+    const rawUsers = await User.find({
       $and: [
         { _id: { $ne: req.userId } },
-        {
-          $or: [
-            { fullName: regex },
-            { username: regex },
-            { email: regex },
-            { mobile: regex },
-          ],
-        },
+        { role: { $ne: "super_admin" } },
+        { username: { $ne: "superadmin" } },
+        { $or: searchConditions },
       ],
     })
       .select("fullName username email mobile profilePhotoUrl isOnline lastActive")
-      .limit(20);
+      .lean();
 
-    return res.json({ success: true, users });
+    const lowerQ = query.toLowerCase();
+    const sortedUsers = rawUsers.sort((a: any, b: any) => {
+      const aName = String(a.fullName || "").toLowerCase();
+      const bName = String(b.fullName || "").toLowerCase();
+      const aUser = String(a.username || "").toLowerCase();
+      const bUser = String(b.username || "").toLowerCase();
+
+      const aStartsWith = aName.startsWith(lowerQ) || aUser.startsWith(lowerQ);
+      const bStartsWith = bName.startsWith(lowerQ) || bUser.startsWith(lowerQ);
+
+      if (aStartsWith && !bStartsWith) return -1;
+      if (!aStartsWith && bStartsWith) return 1;
+
+      return aName.localeCompare(bName);
+    });
+
+    return res.json({ success: true, users: sortedUsers.slice(0, 25) });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Unable to search users" });
   }
@@ -613,14 +644,18 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     }
 
     const chatId = req.params.chatId;
-    const { text, replyTo } = req.body;
+    const { text, replyTo, audioUrl, audioDuration, mediaUrl, mediaType } = req.body;
 
     if (!mongoose.isObjectIdOrHexString(chatId)) {
       return res.status(400).json({ success: false, message: "Invalid chat id" });
     }
 
-    if (!text || typeof text !== "string" || !text.trim()) {
-      return res.status(400).json({ success: false, message: "Message text is required" });
+    const hasText = text && typeof text === "string" && text.trim().length > 0;
+    const hasAudio = Boolean(audioUrl && String(audioUrl).trim());
+    const hasMedia = Boolean(mediaUrl && String(mediaUrl).trim());
+
+    if (!hasText && !hasAudio && !hasMedia) {
+      return res.status(400).json({ success: false, message: "Message content (text, voice note, or media) is required" });
     }
 
     const chat = await Chat.findById(chatId).populate("participants", "isOnline lastActive");
@@ -638,9 +673,15 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     const lastActiveTime = partnerUser?.lastActive ? new Date(partnerUser.lastActive).getTime() : 0;
     const isPartnerOnline = Boolean(partnerUser?.isOnline) && Date.now() - lastActiveTime < 30000;
 
+    const messageText = hasText ? String(text).trim() : hasAudio ? "🎙️ Voice Message" : "📷 Media Attachment";
+
     chat.messages.push({
       sender: new mongoose.Types.ObjectId(req.userId),
-      text: text.trim(),
+      text: messageText,
+      audioUrl: hasAudio ? String(audioUrl).trim() : undefined,
+      audioDuration: hasAudio && typeof audioDuration === "number" ? audioDuration : undefined,
+      mediaUrl: hasMedia ? String(mediaUrl).trim() : undefined,
+      mediaType: hasMedia && mediaType ? mediaType : hasAudio ? "audio" : undefined,
       replyTo: replyTo && typeof replyTo === "object" ? {
         _id: String(replyTo._id || ""),
         text: String(replyTo.text || ""),
@@ -664,7 +705,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       await sendPushNotificationToUser(
         recipientId,
         `💬 ${senderName}`,
-        text.trim(),
+        messageText,
         {
           targetTab: "chat",
           targetId: String(req.userId),

@@ -91,7 +91,7 @@ export const authMiddleware = async (
 };
 
 const isAdminRole = (role?: string) =>
-  ["super_admin", "jamaat_admin", "moderator", "admin"].includes((role || "").trim().toLowerCase());
+  ["super_admin", "moderator", "admin"].includes((role || "").trim().toLowerCase());
 const isSuperAdminRole = (role?: string) =>
   ["super_admin", "admin"].includes((role || "").trim().toLowerCase());
 

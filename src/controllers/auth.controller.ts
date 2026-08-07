@@ -30,7 +30,7 @@ const generateOtpCode = () => String(Math.floor(100000 + Math.random() * 900000)
 
 export const ensureDefaultAdmin = async () => {
   const adminMobile = process.env.SUPER_ADMIN_MOBILE || "03000000000";
-  const adminEmail = process.env.SUPER_ADMIN_EMAIL || "superadmin@kutchi.com";
+  const adminEmail = process.env.SUPER_ADMIN_EMAIL || "admin@kutchicommunity.com";
   const adminPassword = process.env.SUPER_ADMIN_PASSWORD || "SuperAdmin@2026";
   const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
@@ -265,6 +265,8 @@ export const register = async (req: Request, res: Response) => {
       cnic,
       mobile: mobile ? String(mobile).trim() : undefined,
       email: normalizedEmail,
+      country: "Pakistan",
+      city: req.body.city ? String(req.body.city).trim() : "Karachi",
       password: hashedPassword,
       role: "member",
     });
@@ -587,6 +589,10 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
     user.cnic = String(req.body.cnic || "").trim();
     user.mobile = mobile || undefined;
     user.email = email || undefined;
+    user.country = "Pakistan";
+    if (req.body.city !== undefined) {
+      user.city = String(req.body.city || "").trim();
+    }
 
     await user.save();
 
@@ -664,6 +670,45 @@ export const updateProfilePhoto = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const updateCoverPhoto = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) {
+      return res.status(400).json({ success: false, message: "Cover photo is required" });
+    }
+
+    if (!file.mimetype.startsWith("image/")) {
+      return res.status(400).json({ success: false, message: "Only image files are allowed" });
+    }
+
+    const uploadResult = await uploadBufferToCloudinary(file, {
+      folder: process.env.CLOUDINARY_COVER_FOLDER || "community-app/cover-photos",
+      resourceType: "image",
+    });
+
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      {
+        coverPhotoUrl: uploadResult.secure_url,
+        coverPhotoPublicId: uploadResult.public_id,
+      },
+      { new: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    return res.json({ success: true, user, coverPhotoUrl: uploadResult.secure_url });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Unable to upload cover photo" });
+  }
+};
+
 export const listUsers = async (req: AuthRequest, res: Response) => {
   try {
     const requester = req.user || (req.userId ? await User.findById(req.userId).select("-password") : null);
@@ -715,14 +760,14 @@ export const updateUserRole = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: "Invalid role specified" });
     }
 
-    if (targetRole === "super_admin") {
-      return res.status(400).json({
+    const requesterRole = normalizeRoleValue(req.user?.role);
+    if (targetRole === "super_admin" && requesterRole !== "super_admin") {
+      return res.status(403).json({
         success: false,
-        message: "Only 1 Super Admin is allowed in the community app.",
+        message: "Only a Super Admin can promote another user to Super Admin.",
       });
     }
 
-    const requesterRole = normalizeRoleValue(req.user?.role);
     if (requesterRole === "admin") {
       if (targetRole !== "moderator" && targetRole !== "member") {
         return res.status(403).json({ success: false, message: "Admins can only assign or remove Moderator role." });
@@ -734,8 +779,8 @@ export const updateUserRole = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    if (isDefaultAdminUser(user) || user.role === "super_admin") {
-      return res.status(400).json({ success: false, message: "Super admin accounts cannot be modified" });
+    if (isDefaultAdminUser(user)) {
+      return res.status(400).json({ success: false, message: "The default super admin account cannot be modified" });
     }
 
     user.role = targetRole as any;
@@ -825,10 +870,39 @@ export const createCommunityGroup = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const deleteCommunityGroup = async (req: AuthRequest, res: Response) => {
+  try {
+    const { name } = req.params as any;
+    const groupName = decodeURIComponent(name || "").trim();
+
+    if (!groupName) {
+      return res.status(400).json({ success: false, message: "Jamaat name is required" });
+    }
+
+    const group = await CommunityGroup.findOneAndDelete({
+      name: new RegExp(`^${groupName}$`, "i"),
+    });
+
+    if (!group) {
+      return res.status(404).json({ success: false, message: "Jamaat group not found" });
+    }
+
+    // Reassign members of deleted Jamaat to 'General'
+    await User.updateMany(
+      { jamaat: new RegExp(`^${groupName}$`, "i") },
+      { $set: { jamaat: "General" } }
+    );
+
+    return res.json({ success: true, message: `Jamaat "${groupName}" deleted permanently.` });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || "Server error" });
+  }
+};
+
 export const toggleBanUser = async (req: AuthRequest, res: Response) => {
   try {
     const { userId } = req.params as any;
-    const { duration } = req.body;
+    const { duration, isBanned: requestedIsBanned, action } = req.body;
 
     if (!userId) {
       return res.status(400).json({ success: false, message: "userId is required" });
@@ -844,7 +918,17 @@ export const toggleBanUser = async (req: AuthRequest, res: Response) => {
     }
 
     const currentBannedState = Boolean((user as any).isBanned);
-    const nextBannedState = !currentBannedState;
+    let nextBannedState: boolean;
+
+    if (typeof requestedIsBanned === "boolean") {
+      nextBannedState = requestedIsBanned;
+    } else if (action === "unban") {
+      nextBannedState = false;
+    } else if (action === "ban") {
+      nextBannedState = true;
+    } else {
+      nextBannedState = !currentBannedState;
+    }
 
     if (nextBannedState) {
       (user as any).isBanned = true;
@@ -975,6 +1059,23 @@ export const resolveReport = async (req: AuthRequest, res: Response) => {
       success: true,
       message: `Report marked as ${report.status}`,
       report,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || "Server error" });
+  }
+};
+
+export const deleteReport = async (req: AuthRequest, res: Response) => {
+  try {
+    const { reportId } = req.params;
+    const report = await Report.findByIdAndDelete(reportId);
+    if (!report) {
+      return res.status(404).json({ success: false, message: "Report not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Report removed cleanly.",
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err?.message || "Server error" });
