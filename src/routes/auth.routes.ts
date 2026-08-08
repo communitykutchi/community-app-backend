@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { register, login, logout, forceLogoutAllUsers, getMe, updateMe, updateProfilePhoto, updateCoverPhoto, listUsers, updateUserRole, removeUser, listCommunityGroups, createCommunityGroup, deleteCommunityGroup, sendOtp, verifyOtp, resetPassword, checkUsername, toggleBanUser, getSuperAdminAnalytics, submitReport, getReports, resolveReport, deleteReport } from "../controllers/auth.controller";
+import { register, login, logout, forceLogoutAllUsers, getMe, updateMe, changeUserEmail, updateProfilePhoto, updateCoverPhoto, listUsers, updateUserRole, removeUser, listCommunityGroups, createCommunityGroup, deleteCommunityGroup, sendOtp, verifyOtp, resetPassword, checkUsername, toggleBanUser, getSuperAdminAnalytics, submitReport, getReports, resolveReport, deleteReport } from "../controllers/auth.controller";
 import { authMiddleware, adminMiddleware, superAdminMiddleware } from "../middlewares/auth.middleware";
 import { uploadProfilePhoto } from "../middlewares/upload.middleware";
 
@@ -34,6 +34,7 @@ router.post("/logout", authMiddleware, logout);
 router.post("/force-logout-all", authMiddleware, superAdminMiddleware, forceLogoutAllUsers);
 router.get("/me", authMiddleware, getMe);
 router.put("/me", authMiddleware, updateMe);
+router.put("/me/email", authMiddleware, changeUserEmail);
 router.post("/me/photo", authMiddleware, handleProfilePhotoUpload, updateProfilePhoto);
 router.post("/me/cover", authMiddleware, handleProfilePhotoUpload, updateCoverPhoto);
 router.get("/users", authMiddleware, adminMiddleware, listUsers);

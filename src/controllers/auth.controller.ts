@@ -593,7 +593,7 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
     user.dob = String(req.body.dob || "").trim();
     user.cnic = String(req.body.cnic || "").trim();
     user.mobile = mobile || undefined;
-    user.email = email || undefined;
+    // Email is updated only via OTP verification endpoint /auth/me/email
     user.country = "Pakistan";
     if (req.body.city !== undefined) {
       user.city = String(req.body.city || "").trim();
@@ -639,6 +639,61 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
     }
 
     return res.status(500).json({ success: false, message: err.message || "Unable to update profile" });
+  }
+};
+
+export const changeUserEmail = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
+    const { newEmail, otp } = req.body;
+    const normalizedEmail = String(newEmail || "").trim().toLowerCase();
+    const code = String(otp || "").trim();
+
+    if (!normalizedEmail || !code) {
+      return res.status(400).json({ success: false, message: "New email address and OTP code are required" });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(400).json({ success: false, message: "Please enter a valid email address" });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail, _id: { $ne: req.userId } });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: "This email is already registered to another account" });
+    }
+
+    const otpRecord = await Otp.findOne({
+      email: normalizedEmail,
+      purpose: "change_email",
+      used: false,
+      expiresAt: { $gt: new Date() },
+    }).sort({ createdAt: -1 });
+
+    if (!otpRecord || otpRecord.code !== code) {
+      return res.status(400).json({ success: false, message: "Invalid or expired OTP code" });
+    }
+
+    otpRecord.used = true;
+    await otpRecord.save();
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    user.email = normalizedEmail;
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: "Email address updated successfully!",
+      user: sanitizeUser(user),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || "Unable to update email address" });
   }
 };
 
@@ -772,10 +827,10 @@ export const updateUserRole = async (req: AuthRequest, res: Response) => {
     }
 
     const requesterRole = normalizeRoleValue(req.user?.role);
-    if (targetRole === "super_admin" && requesterRole !== "super_admin") {
+    if (targetRole === "super_admin") {
       return res.status(403).json({
         success: false,
-        message: "Only a Super Admin can promote another user to Super Admin.",
+        message: "Super Admin role cannot be assigned. Only 1 Super Admin account is allowed on the platform.",
       });
     }
 
