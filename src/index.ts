@@ -19,7 +19,7 @@ import friendRoutes from "./routes/friends.routes";
 import noticeRoutes from "./routes/notices.routes";
 import notificationRoutes from "./routes/notifications.routes";
 import pollRoutes from "./routes/polls.routes";
-import jobRoutes from "./routes/jobs.routes";
+import workerRoutes from "./routes/workers.routes";
 import storageRoutes from "./routes/storage.routes";
 import {
   securityHeaders,
@@ -87,6 +87,7 @@ async function startServer() {
   });
 
   app.use("/auth", authRateLimiter, authRoutes);
+  app.use("/api/auth", authRateLimiter, authRoutes);
   app.use("/posts", postRoutes);
   app.use("/api/posts", postRoutes);
   app.use("/notices", noticeRoutes);
@@ -100,8 +101,10 @@ async function startServer() {
   app.use("/api/friends", friendRoutes);
   app.use("/polls", pollRoutes);
   app.use("/api/polls", pollRoutes);
-  app.use("/jobs", jobRoutes);
-  app.use("/api/jobs", jobRoutes);
+  app.use("/workers", workerRoutes);
+  app.use("/api/workers", workerRoutes);
+  app.use("/jobs", workerRoutes);
+  app.use("/api/jobs", workerRoutes);
   app.use("/storage", storageRoutes);
   app.use("/api/storage", storageRoutes);
   app.use("/uploads", express.static(path.join(__dirname, "uploads")));

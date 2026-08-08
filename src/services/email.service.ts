@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 
-export type OtpPurpose = "register" | "reset_password";
+export type OtpPurpose = "register" | "reset_password" | "change_email";
 
 const getResendClient = () => {
   const apiKey = process.env.RESEND_API_KEY;
@@ -31,17 +31,28 @@ export const sendOtpEmail = async (email: string, code: string, purpose: OtpPurp
   }
 
   const resend = getResendClient();
-  const isRegister = purpose === "register";
-  const subject = isRegister 
+  const subject = purpose === "change_email"
+    ? `🔒 ${code} is your Email Change Verification Code`
+    : purpose === "register"
     ? `🔒 ${code} is your Kutchi Community Verification Code`
     : `🔑 ${code} is your Password Reset Code`;
 
   const logoUrl = process.env.APP_LOGO_URL || CLOUDINARY_LOGO_URL;
   const currentYear = new Date().getFullYear();
 
-  const title = isRegister ? "Verify Your Email Address" : "Reset Account Password";
-  const badgeText = isRegister ? "ACCOUNT VERIFICATION" : "SECURITY CODE";
-  const leadText = isRegister
+  const title = purpose === "change_email"
+    ? "Verify New Email Address"
+    : purpose === "register"
+    ? "Verify Your Email Address"
+    : "Reset Account Password";
+  const badgeText = purpose === "change_email"
+    ? "EMAIL VERIFICATION"
+    : purpose === "register"
+    ? "ACCOUNT VERIFICATION"
+    : "SECURITY CODE";
+  const leadText = purpose === "change_email"
+    ? "We received a request to update your email address on <strong>Kutchi Community</strong>. Please use the 6-digit verification code below to verify your new email."
+    : purpose === "register"
     ? "Thank you for joining <strong>Kutchi Community</strong>. Please use the 6-digit verification code below to complete your registration."
     : "We received a request to reset your <strong>Kutchi Community</strong> account password. Use the verification code below to proceed.";
 

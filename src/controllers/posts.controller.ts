@@ -119,14 +119,21 @@ export const createPost = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     const { text } = req.body;
-    const requesterRole = String(req.user?.role || "");
+    const requesterRole = String(req.user?.role || "").toLowerCase().trim();
 
     if (!userId) {
       return res.status(401).json({ success: false, message: "Please login to create a post." });
     }
 
-    if (String(req.user?.role || "").toLowerCase() === "banned") {
+    if (requesterRole === "banned") {
       return res.status(403).json({ success: false, message: "Your account is banned from creating posts." });
+    }
+
+    if (!["super_admin", "admin", "jamaat_admin", "jamaatadmin", "moderator", "mod"].includes(requesterRole)) {
+      return res.status(403).json({
+        success: false,
+        message: "Posting will be available soon for members. (پوسٹنگ فی الحال صرف ایڈمنز کے لیے دستیاب ہے)",
+      });
     }
 
     if (!text || typeof text !== "string" || !text.trim()) {

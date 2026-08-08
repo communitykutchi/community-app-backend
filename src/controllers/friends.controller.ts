@@ -675,6 +675,11 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
 
     const messageText = hasText ? String(text).trim() : hasAudio ? "🎙️ Voice Message" : "📷 Media Attachment";
 
+    // Update sender's lastActive timestamp and presence in database
+    await User.findByIdAndUpdate(req.userId, {
+      $set: { isOnline: true, lastActive: new Date() },
+    }).catch(() => {});
+
     chat.messages.push({
       sender: new mongoose.Types.ObjectId(req.userId),
       text: messageText,

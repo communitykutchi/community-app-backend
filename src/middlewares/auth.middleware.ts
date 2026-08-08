@@ -21,11 +21,13 @@ export const authMiddleware = async (
   res: Response,
   next: NextFunction
 ) => {
+  const isLogoutRequest = Boolean(req.originalUrl?.includes("/logout") || req.path?.includes("/logout"));
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : undefined;
 
     if (!token) {
+      if (isLogoutRequest) return next();
       return res.status(401).json({
         success: false,
         code: "UNAUTHORIZED",
@@ -33,10 +35,18 @@ export const authMiddleware = async (
       });
     }
 
-    const payload = jwt.verify(token as string, JWT_SECRET) as { id?: string; _id?: string; activeSessionId?: string };
+    let payload: { id?: string; _id?: string; activeSessionId?: string } = {};
+    try {
+      payload = jwt.verify(token as string, JWT_SECRET) as any;
+    } catch (tokenErr) {
+      if (isLogoutRequest) return next();
+      throw tokenErr;
+    }
+
     const resolvedUserId = payload.id || payload._id;
 
     if (!resolvedUserId) {
+      if (isLogoutRequest) return next();
       return res.status(401).json({
         success: false,
         code: "INVALID_TOKEN",
@@ -46,6 +56,7 @@ export const authMiddleware = async (
 
     const user = await User.findById(resolvedUserId).select("-password");
     if (!user) {
+      if (isLogoutRequest) return next();
       return res.status(401).json({
         success: false,
         code: "USER_NOT_FOUND",
@@ -53,7 +64,7 @@ export const authMiddleware = async (
       });
     }
 
-    if (!payload.activeSessionId || !user.activeSessionId || user.activeSessionId !== payload.activeSessionId) {
+    if (!isLogoutRequest && (!payload.activeSessionId || !user.activeSessionId || user.activeSessionId !== payload.activeSessionId)) {
       return res.status(401).json({
         success: false,
         code: "ACCOUNT_LOGGED_IN_ELSEWHERE",
@@ -82,6 +93,7 @@ export const authMiddleware = async (
     req.user = user;
     return next();
   } catch (err) {
+    if (isLogoutRequest) return next();
     return res.status(401).json({
       success: false,
       code: "INVALID_TOKEN",

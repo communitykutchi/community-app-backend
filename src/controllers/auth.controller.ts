@@ -29,6 +29,9 @@ const normalizeRoleValue = (role?: string) => {
 const generateOtpCode = () => String(Math.floor(100000 + Math.random() * 900000));
 
 export const ensureDefaultAdmin = async () => {
+  await User.collection.dropIndex("mobile_1").catch(() => {});
+  await User.syncIndexes().catch(() => {});
+
   const adminMobile = process.env.SUPER_ADMIN_MOBILE || "03000000000";
   const adminEmail = process.env.SUPER_ADMIN_EMAIL || "admin@kutchicommunity.com";
   const adminPassword = process.env.SUPER_ADMIN_PASSWORD || "SuperAdmin@2026";
@@ -73,7 +76,7 @@ export const sendOtp = async (req: Request, res: Response) => {
     const { email, purpose } = req.body;
     const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    if (!normalizedEmail || !["register", "reset_password"].includes(purpose)) {
+    if (!normalizedEmail || !["register", "reset_password", "change_email"].includes(purpose)) {
       return res.status(400).json({ success: false, message: "Valid email and purpose are required" });
     }
 
@@ -81,10 +84,11 @@ export const sendOtp = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Please enter a valid email address" });
     }
 
-    if (purpose === "register") {
+    if (purpose === "register" || purpose === "change_email") {
       const existingUser = await User.findOne({ email: normalizedEmail });
-      if (existingUser) {
-        return res.status(400).json({ success: false, message: "This email is already registered" });
+      const currentUserId = (req as any).user?.id || (req as any).user?._id;
+      if (existingUser && (!currentUserId || String(existingUser._id) !== String(currentUserId))) {
+        return res.status(400).json({ success: false, message: "This email is already registered to another account" });
       }
     } else {
       const existingUser = await User.findOne({ email: normalizedEmail });
@@ -127,7 +131,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
     const { email, code, purpose } = req.body;
     const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    if (!normalizedEmail || !code || !["register", "reset_password"].includes(purpose)) {
+    if (!normalizedEmail || !code || !["register", "reset_password", "change_email"].includes(purpose)) {
       return res.status(400).json({ success: false, message: "Email, OTP, and purpose are required" });
     }
 
@@ -223,8 +227,8 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Username must be 3 to 30 characters" });
     }
 
-    if (!/^[a-z0-9._-]+$/.test(normalizedUsername)) {
-      return res.status(400).json({ success: false, message: "Username format is invalid" });
+    if (!/^[a-z][a-z0-9._-]*$/.test(normalizedUsername)) {
+      return res.status(400).json({ success: false, message: "Username must start with an alphabet (a-z)" });
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -239,7 +243,7 @@ export const register = async (req: Request, res: Response) => {
       email: normalizedEmail,
       purpose: "register",
       used: true,
-      expiresAt: { $gt: new Date() },
+      createdAt: { $gt: new Date(Date.now() - 60 * 60 * 1000) },
     }).sort({ createdAt: -1 });
 
     if (!verifiedOtp) {
@@ -290,10 +294,11 @@ export const register = async (req: Request, res: Response) => {
       message: "User registered successfully",
       user: sanitizeUser(newUser),
     });
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[Register Error]", err?.message || err);
     return res.status(500).json({
       success: false,
-      message: "Server error",
+      message: err?.message || "Server error",
     });
   }
 };
@@ -307,8 +312,8 @@ export const checkUsername = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Username is required", available: false });
     }
 
-    if (username.length < 3 || username.length > 30 || !/^[a-z0-9._-]+$/.test(username)) {
-      return res.status(400).json({ success: false, message: "Invalid username", available: false });
+    if (username.length < 3 || username.length > 30 || !/^[a-z][a-z0-9._-]*$/.test(username)) {
+      return res.status(400).json({ success: false, message: "Username must start with an alphabet (a-z)", available: false });
     }
 
     const existing = await User.findOne({ username }).select("_id");
@@ -592,6 +597,12 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
     user.country = "Pakistan";
     if (req.body.city !== undefined) {
       user.city = String(req.body.city || "").trim();
+    }
+    if (req.body.coverPhotoUrl !== undefined) {
+      user.coverPhotoUrl = String(req.body.coverPhotoUrl || "").trim();
+    }
+    if (req.body.profilePhotoUrl !== undefined) {
+      user.profilePhotoUrl = String(req.body.profilePhotoUrl || "").trim();
     }
 
     await user.save();

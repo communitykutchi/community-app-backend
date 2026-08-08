@@ -52,12 +52,16 @@ router.post(["/push-token", "/users/push-token"], authMiddleware, async (req: Au
 });
 
 // Update current user presence
-router.post(["/presence", "/users/presence", "/heartbeat"], authMiddleware, async (req: AuthRequest, res: Response) => {
+const handlePresence = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.userId || req.user?._id || (req.user as any)?.id;
-    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
-
     const { status, isOnline: rawIsOnline } = req.body || {};
+    const userId = req.userId || req.user?._id || (req.user as any)?.id;
+    if (!userId) {
+      if (status === "inactive" || rawIsOnline === false) {
+        return res.status(200).json({ success: true, message: "Presence updated" });
+      }
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
     let isOnline = true;
     if (status === "inactive" || rawIsOnline === false) {
       isOnline = false;
@@ -86,10 +90,14 @@ router.post(["/presence", "/users/presence", "/heartbeat"], authMiddleware, asyn
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message || "Unable to update presence" });
   }
-});
+};
+
+router.post("/presence", authMiddleware, handlePresence);
+router.post("/users/presence", authMiddleware, handlePresence);
+router.post("/heartbeat", authMiddleware, handlePresence);
 
 // Fetch target user presence status
-router.get(["/:userId/presence", "/users/:userId/presence"], authMiddleware, async (req: AuthRequest, res: Response) => {
+const handleGetPresence = async (req: AuthRequest, res: Response) => {
   try {
     const { userId } = req.params;
     const targetUser = await User.findById(userId).select("isOnline lastActive");
@@ -110,7 +118,10 @@ router.get(["/:userId/presence", "/users/:userId/presence"], authMiddleware, asy
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message || "Unable to fetch user presence" });
   }
-});
+};
+
+router.get("/:userId/presence", authMiddleware, handleGetPresence);
+router.get("/users/:userId/presence", authMiddleware, handleGetPresence);
 
 // Fetch target user public profile & posts
 router.get(["/profile/:userId", "/users/profile/:userId"], authMiddleware, async (req: AuthRequest, res: Response) => {
